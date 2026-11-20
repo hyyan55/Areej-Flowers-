@@ -471,8 +471,12 @@ async function put(store,val){
   }
   if(store==='messages'){
     const payload={name:val.name,subject:val.subject,body:val.body,is_read:!!val.read,created_at:new Date(val.createdAt||Date.now()).toISOString()};
-    let q=val.id?supabase.from('messages').update(payload).eq('id',val.id).select('id').single():supabase.from('messages').insert(payload).select('id').single();
-    const {data,error}=await q;if(error)throw error;return Number(data.id);
+    if(val.id){ /* admin only: updating a message may read it back */
+      const {data,error}=await supabase.from('messages').update(payload).eq('id',val.id).select('id').single();if(error)throw error;return Number(data.id);
+    }
+    /* Visitors cannot read messages back (SELECT is admin-only), so insert without asking for the row: asking for it fails the whole request. */
+    const {error}=await supabase.from('messages').insert(payload);
+    if(error)throw error;return 0;
   }
   if(store==='media'){
     if(!val.blob)throw new Error('ملف الصورة غير متاح لإعادة الرفع.');
