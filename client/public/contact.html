@@ -19,6 +19,9 @@
     --text: #f3eef7; --dim: #b9a8c6; --border: #453452; --input-bg: #261b31;
   }
   * { box-sizing: border-box; }
+  /* Never allow horizontal scrolling: a single off-screen element used to
+     stretch the page sideways, hiding the content off to the side. */
+  html, body { overflow-x: clip; }
   body {
     margin: 0; background: var(--bg); color: var(--text);
     font-family: "Segoe UI", Tahoma, "Noto Sans Arabic", Arial, sans-serif;
@@ -50,7 +53,7 @@
   }
   input:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
   textarea { min-height: 140px; resize: vertical; }
-  .hp { position: absolute; left: -9999px; top: auto; width: 1px; height: 1px; overflow: hidden; }
+  .hp { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); clip-path: inset(50%); white-space: nowrap; border: 0; }
   button {
     width: 100%; border: 0; border-radius: 12px; padding: 13px;
     background: var(--accent); color: #fff; font: inherit; font-weight: 800; font-size: 16px;

@@ -1009,8 +1009,10 @@ function ContactPage({ t, settings }: { t: (typeof STRINGS)["ar"]; settings: Api
             <label htmlFor="c-body" className="label">{t.message} *</label>
             <textarea id="c-body" className="input" rows={6} {...FIELDS.submitMessage.body} value={body} onChange={(e) => setBody(e.target.value)} required />
           </div>
-          {/* Honeypot: hidden from people, filled only by bots; the server discards those submissions. */}
-          <div aria-hidden="true" style={{ position: "absolute", left: "-9999px", width: 1, height: 1, overflow: "hidden" }}>
+          {/* Honeypot: hidden from people, filled only by bots; the server discards those submissions.
+              Hidden with clipping, NOT with left:-9999px — the off-screen offset used to stretch the
+              page ~10000px sideways, leaving the content off to the side. */}
+          <div aria-hidden="true" style={{ position: "absolute", width: 1, height: 1, padding: 0, margin: -1, overflow: "hidden", clip: "rect(0, 0, 0, 0)", clipPath: "inset(50%)", whiteSpace: "nowrap", border: 0 }}>
             <label htmlFor="c-website">Website</label>
             <input
               id="c-website"
