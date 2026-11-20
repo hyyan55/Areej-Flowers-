@@ -609,11 +609,11 @@ function StatsTab({ t, token }: { t: Dict; token: string }) {
         {!hasData ? (
           <p className="dim text-sm">{t.visitorsNoData}</p>
         ) : (
-          <div className="flex items-end gap-[3px] h-40" role="img" aria-label={t.visitorsDaily}>
+          <div className="grid grid-cols-[repeat(30,minmax(0,1fr))] gap-x-[3px] h-40 items-end" role="img" aria-label={t.visitorsDaily}>
             {days.map((day) => (
               <div
                 key={day.date}
-                className="flex-1 flex flex-col items-center justify-end h-full min-w-0"
+                className="flex flex-col items-center justify-end h-full min-w-0"
                 title={`${day.date}: ${day.count}`}
               >
                 <span className="text-[11px] leading-none font-bold mb-1" style={{ color: "var(--accent)" }}>
