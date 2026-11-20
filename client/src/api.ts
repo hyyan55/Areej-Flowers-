@@ -309,7 +309,7 @@ async function fetchArticles(publishedOnly: boolean): Promise<ArticleRow[]> {
 
 // ---------- in-memory defaults (used when the DB rows are missing) ----------
 
-const DEFAULT_SETTINGS: SettingsOut = {
+export const DEFAULT_SETTINGS: SettingsOut = {
   site_name: "Areej Flowers",
   site_description: "",
   tagline_ar: "مساحة للكلمات، والمعرفة، والأثر الجميل.",
@@ -336,7 +336,7 @@ const DEFAULT_SETTINGS: SettingsOut = {
   seo_description: "",
 };
 
-const DEFAULT_PROFILE: ProfileOut = {
+export const DEFAULT_PROFILE: ProfileOut = {
   full_name_ar: "أريج خضر محمد النور",
   full_name_en: "Areej Khader Mohammed Alnoor",
   bio: "كاتبة وصانعة محتوى تعليمي وتثقيفي، تؤمن بأن وراء كل محتوى رسالة وهدفاً نبيلاً.",
@@ -393,11 +393,59 @@ function categoryOut(row: CategoryRow, publishedCount: number): CategoryOut {
 
 // ---------- public actions ----------
 
-async function getSite(_args: Record<string, never>): Promise<{
+// ---------- render-first site loading ----------
+// The app must paint instantly, even when the database is cold or dead:
+// visitors see the built-in defaults (or the last cached copy) at once,
+// and the live data replaces them in the background when it arrives.
+// A slow database must never leave the visitor staring at a loading
+// screen — that was the root cause of pages "not opening".
+
+export interface SitePayload {
   settings: SettingsOut;
   profile: ProfileOut;
   categories: CategoryOut[];
-}> {
+}
+
+const SITE_CACHE_KEY = "af_site_cache";
+
+export function getInitialSite(): SitePayload {
+  try {
+    const raw = localStorage.getItem(SITE_CACHE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<SitePayload>;
+      if (parsed && typeof parsed === "object" && parsed.settings && parsed.profile) {
+        return {
+          settings: { ...DEFAULT_SETTINGS, ...(parsed.settings as Partial<SettingsOut>) },
+          profile: { ...DEFAULT_PROFILE, ...(parsed.profile as Partial<ProfileOut>) },
+          categories: Array.isArray(parsed.categories) ? (parsed.categories as CategoryOut[]) : [],
+        };
+      }
+    }
+  } catch {
+    // Corrupt cache — fall through to the built-in defaults.
+  }
+  return { settings: DEFAULT_SETTINGS, profile: DEFAULT_PROFILE, categories: [] };
+}
+
+function writeSiteCache(payload: SitePayload): void {
+  try {
+    localStorage.setItem(SITE_CACHE_KEY, JSON.stringify(payload));
+  } catch {
+    // Storage full or unavailable — the app still works from defaults.
+  }
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<T>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error("timeout")), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer !== undefined) clearTimeout(timer);
+  });
+}
+
+async function fetchSiteFresh(): Promise<SitePayload> {
   const [settings, profile, cats] = await Promise.all([loadSettings(), loadProfile(), fetchCategories()]);
   const published = await fetchArticles(true);
   const counts = new Map<number, number>();
@@ -410,6 +458,26 @@ async function getSite(_args: Record<string, never>): Promise<{
     profile,
     categories: cats.map((c) => categoryOut(c, counts.get(c.id) ?? 0)),
   };
+}
+
+async function getSite(_args: Record<string, never>): Promise<SitePayload> {
+  const cached = getInitialSite();
+  const freshPromise = fetchSiteFresh();
+  // Even when the live fetch is too slow for this visit, its result still
+  // lands in the cache and notifies the UI, so the page updates by itself.
+  void freshPromise
+    .then((fresh) => {
+      writeSiteCache(fresh);
+      window.dispatchEvent(new CustomEvent<SitePayload>("af-site-updated", { detail: fresh }));
+    })
+    .catch(() => undefined);
+  try {
+    const fresh = await withTimeout(freshPromise, 4000);
+    writeSiteCache(fresh);
+    return fresh;
+  } catch {
+    return cached;
+  }
 }
 
 async function bootstrap(_args: Record<string, never>): Promise<{ seeded: boolean }> {
@@ -1194,6 +1262,7 @@ async function deleteMessage(args: { token: string; id: number }): Promise<{ ok:
 
 export const api = {
   getSite,
+  getInitialSite,
   bootstrap,
   listPosts,
   getPost,

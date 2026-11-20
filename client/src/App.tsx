@@ -1,12 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "./api";
 import { FIELDS } from "./fields";
 import { STRINGS, type Lang } from "./i18n";
 import { getPreset, type PresetId } from "./presets";
 import { formatDate, PostCard, SocialLinks, type Post } from "./shared";
-import { Admin } from "./Admin";
 import { aboutImg, heroImg } from "./assets/images";
+
+// The admin dashboard is a large chunk; load it only when #/admin opens so
+// the first paint stays light.
+const Admin = lazy(() => import("./Admin").then((m) => ({ default: m.Admin })));
 
 
 type View =
@@ -96,7 +99,23 @@ function sameView(a: View, b: View): boolean {
 }
 
 export function App() {
-  const site = useQuery({ queryKey: ["site"], queryFn: () => api.getSite({}) });
+  // Render-first: the page paints at once from the cached copy (or the
+  // built-in defaults) while the live data loads in the background — the
+  // app no longer waits for the database before showing anything.
+  const queryClient = useQueryClient();
+  const site = useQuery({
+    queryKey: ["site"],
+    queryFn: () => api.getSite({}),
+    initialData: () => api.getInitialSite(),
+  });
+  useEffect(() => {
+    const onSiteUpdated = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail) queryClient.setQueryData(["site"], detail);
+    };
+    window.addEventListener("af-site-updated", onSiteUpdated);
+    return () => window.removeEventListener("af-site-updated", onSiteUpdated);
+  }, [queryClient]);
   const bootRef = useRef(false);
   useEffect(() => {
     if (!bootRef.current) {
@@ -105,7 +124,7 @@ export function App() {
     }
   }, []);
 
-  const settings = site.data?.settings;
+  const settings = (site.data ?? api.getInitialSite()).settings;
   const [lang, setLang] = useState<Lang>(() => {
     const saved = localStorage.getItem("areej-lang");
     return saved === "en" || saved === "ar" ? saved : "ar";
@@ -240,22 +259,10 @@ export function App() {
     { label: t.contact, v: { name: "contact" }, active: view.name === "contact" },
   ];
 
-  if (site.isPending) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: "#F8F3FA" }}>
-        <p className="text-lg font-bold" style={{ color: "#79509B" }}>Areej Flowers…</p>
-      </div>
-    );
-  }
-  if (site.error || !site.data || !settings) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-6" style={{ background: "#F8F3FA" }}>
-        <p>{t.loadError}</p>
-      </div>
-    );
-  }
-
-  const { profile, categories } = site.data;
+  // The page never waits for the database: with initialData above, the
+  // settings/profile/categories are always present (cached copy or
+  // built-in defaults) and refresh in the background when live data lands.
+  const { profile, categories } = site.data ?? api.getInitialSite();
 
   return (
     <div
@@ -380,16 +387,24 @@ export function App() {
         )}
         {view.name === "contact" && <ContactPage t={t} settings={settings} />}
         {view.name === "admin" && (
-          <Admin
-            t={t}
-            lang={lang}
-            site={site.data}
-            appearance={appearance}
-            onAppearanceChange={setAppearance}
-            preview={preview}
-            onPreviewChange={setPreview}
-            onExit={() => nav({ name: "home" })}
-          />
+          <Suspense
+            fallback={
+              <div className="min-h-screen flex items-center justify-center">
+                <p className="dim">{t.loading}</p>
+              </div>
+            }
+          >
+            <Admin
+              t={t}
+              lang={lang}
+              site={site.data ?? api.getInitialSite()}
+              appearance={appearance}
+              onAppearanceChange={setAppearance}
+              preview={preview}
+              onPreviewChange={setPreview}
+              onExit={() => nav({ name: "home" })}
+            />
+          </Suspense>
         )}
       </main>
 
