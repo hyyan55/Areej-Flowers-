@@ -5,6 +5,7 @@ import { FIELDS } from "./fields";
 import { SOCIAL_PLATFORMS, type Dict, type Lang } from "./i18n";
 import { PRESETS, type PresetId } from "./presets";
 import {
+buildDailySeries,
 formatDate,
 formatDateTime,
 uploadImageFile,
@@ -24,7 +25,7 @@ export interface DesignPreview {
 }
 
 type Tab =
-  | "overview" | "posts" | "categories" | "about" | "media"
+  | "overview" | "stats" | "posts" | "categories" | "about" | "media"
   | "branding" | "design" | "settings" | "messages" | "seo" | "security";
 
 const TOKEN_KEY = "areej-admin-token";
@@ -77,6 +78,7 @@ export function Admin({
 
   const tabs: { id: Tab; label: string }[] = [
     { id: "overview", label: t.overview },
+    { id: "stats", label: t.visitorStats },
     { id: "posts", label: t.postsMgmt },
     { id: "categories", label: t.categoriesMgmt },
     { id: "about", label: t.aboutMgmt },
@@ -155,6 +157,7 @@ export function Admin({
           {tab === "overview" && (
             <OverviewTab t={t} lang={lang} token={token} onNewPost={() => setTab("posts")} onGo={setTab} />
           )}
+          {tab === "stats" && <StatsTab t={t} token={token} />}
           {tab === "posts" && <PostsTab t={t} lang={lang} token={token} site={site} />}
           {tab === "categories" && <CategoriesTab t={t} token={token} site={site} />}
           {tab === "about" && <AboutTab t={t} token={token} site={site} />}
@@ -530,6 +533,108 @@ function OverviewTab({
             </ul>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- visitor statistics ---------------- */
+
+// The RPC/relation does not exist until the migration in
+// supabase/migrations/20261120160000_visitor_stats.sql is applied —
+// show a setup hint instead of a generic error in that case.
+function isStatsNotSetupError(e: unknown): boolean {
+  const code = (e as { code?: unknown } | null)?.code;
+  const msg = e instanceof Error ? e.message : String(e ?? "");
+  return (
+    code === "PGRST202" ||
+    /could not find the function/i.test(msg) ||
+    /relation .*visits.* does not exist/i.test(msg) ||
+    /could not find the table/i.test(msg)
+  );
+}
+
+function StatsTab({ t, token }: { t: Dict; token: string }) {
+  const q = useQuery({
+    queryKey: ["visitor-stats", token],
+    queryFn: () => api.getVisitorStats({ token }),
+    enabled: !!token,
+    refetchInterval: 60_000,
+  });
+
+  if (q.isPending) return <p className="dim">{t.loading}</p>;
+  if (q.isError) {
+    return (
+      <div className="grid gap-6">
+        <div className="card p-5">
+          <h2 className="font-display text-xl font-extrabold mb-2">{t.visitorStats}</h2>
+          <p className="dim text-sm">{isStatsNotSetupError(q.error) ? t.visitorsNotSetup : t.loadError}</p>
+          <button type="button" className="btn-ghost px-4 py-2 text-sm mt-4" onClick={() => void q.refetch()}>
+            {t.visitorsRefresh}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const d = q.data;
+  const stats = [
+    { label: t.visitorsTotal, value: d.total },
+    { label: t.visitorsToday, value: d.today },
+    { label: t.visitorsLast7, value: d.last7 },
+    { label: t.visitorsLast30, value: d.last30 },
+  ];
+  const days = buildDailySeries(d.daily ?? []);
+  const max = Math.max(1, ...days.map((x) => x.count));
+  const hasData = days.some((x) => x.count > 0);
+
+  return (
+    <div className="grid gap-6 fade-up">
+      <div className="flex flex-wrap items-center gap-3">
+        <h2 className="font-display text-xl font-extrabold">{t.visitorStats}</h2>
+        <button type="button" className="btn-ghost px-4 py-2 text-sm ms-auto" onClick={() => void q.refetch()}>
+          {t.visitorsRefresh}
+        </button>
+      </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {stats.map((s) => (
+          <div key={s.label} className="card p-4 text-center">
+            <p className="font-display text-3xl font-extrabold" style={{ color: "var(--accent)" }}>{s.value}</p>
+            <p className="dim text-sm mt-1">{s.label}</p>
+          </div>
+        ))}
+      </div>
+      <div className="card p-5">
+        <h3 className="font-display text-lg font-extrabold mb-4">{t.visitorsDaily}</h3>
+        {!hasData ? (
+          <p className="dim text-sm">{t.visitorsNoData}</p>
+        ) : (
+          <div className="flex items-end gap-[3px] h-40" role="img" aria-label={t.visitorsDaily}>
+            {days.map((day) => (
+              <div
+                key={day.date}
+                className="flex-1 flex flex-col items-center justify-end h-full min-w-0"
+                title={`${day.date}: ${day.count}`}
+              >
+                <span className="text-[11px] leading-none font-bold mb-1" style={{ color: "var(--accent)" }}>
+                  {day.count > 0 ? day.count : ""}
+                </span>
+                <div
+                  className="w-full rounded-t"
+                  style={{
+                    height: `${day.count === 0 ? 1.5 : Math.max(5, (day.count / max) * 100)}%`,
+                    background: "var(--accent)",
+                    opacity: day.count === 0 ? 0.15 : 0.85,
+                  }}
+                />
+                <span className="dim text-[10px] leading-none mt-1">
+                  {new Date(`${day.date}T00:00:00Z`).getUTCDate()}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+        <p className="dim text-sm mt-4">{t.visitorsNote}</p>
       </div>
     </div>
   );

@@ -146,6 +146,17 @@ export function App() {
     }
   }, []);
 
+  // Visitor statistics: record one anonymous visit per day. Fire-and-forget
+  // (api.recordVisit never throws); never on the admin view, so dashboard
+  // visits and the admin's own logins are never counted.
+  const visitRef = useRef(false);
+  useEffect(() => {
+    if (!visitRef.current) {
+      visitRef.current = true;
+      if (viewRef.current.name !== "admin") void api.recordVisit({});
+    }
+  }, []);
+
   const settings = (site.data ?? api.getInitialSite()).settings;
   const [lang, setLang] = useState<Lang>(() => {
     const saved = localStorage.getItem("areej-lang");

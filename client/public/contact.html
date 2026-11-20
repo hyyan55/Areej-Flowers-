@@ -180,5 +180,48 @@
   });
 })();
 </script>
+<script>
+(function () {
+  // Visitor statistics (same mechanism as the main site): one anonymous
+  // visit per UTC day. Silent on any failure; never blocks the page.
+  // The contact page is a public entry point, so it records visits too —
+  // except for logged-in admins (a Supabase auth token in localStorage).
+  try {
+    var BOT_RE = /bot|crawl|spider|slurp|facebookexternalhit|twitterbot|linkedinbot|embedly|quora|pinterest|slackbot|telegrambot|whatsapp|discordbot|googlebot|bingbot|yandex|baidu|duckduckbot|ahrefsbot|semrushbot|mj12bot|petalbot|bytespider|gptbot|claudebot|ccbot|anthropic|perplexitybot|headless/i;
+    if (BOT_RE.test(navigator.userAgent || "") || navigator.webdriver === true) return;
+    var isAdmin = false;
+    for (var i = 0; i < localStorage.length; i++) {
+      if (/^sb-.*-auth-token$/.test(localStorage.key(i) || "")) { isAdmin = true; break; }
+    }
+    if (isAdmin) return;
+    var today = new Date().toISOString().slice(0, 10);
+    if (localStorage.getItem("af_visit_date") === today) return;
+    var visitorId = localStorage.getItem("af_visitor_id");
+    if (!visitorId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(visitorId)) {
+      visitorId = (crypto.randomUUID ? crypto.randomUUID() : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+        var r = (Math.random() * 16) | 0;
+        return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
+      }));
+      try { localStorage.setItem("af_visitor_id", visitorId); } catch (e) { /* ignore */ }
+    }
+    var controller = new AbortController();
+    var timer = setTimeout(function () { controller.abort(); }, 8000);
+    fetch("https://brpfiahribknkoqxzcch.supabase.co/rest/v1/visits?on_conflict=visitor_id,visit_date", {
+      method: "POST",
+      headers: {
+        "apikey": "sb_publishable_lAAaaAB7EqYn5UaKBpVeJA_-3Ww2KCH",
+        "Authorization": "Bearer sb_publishable_lAAaaAB7EqYn5UaKBpVeJA_-3Ww2KCH",
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal,resolution=ignore-duplicates"
+      },
+      body: JSON.stringify({ visitor_id: visitorId, visit_date: today, created_at: new Date().toISOString() }),
+      signal: controller.signal
+    }).then(function (res) {
+      clearTimeout(timer);
+      if (res.ok) { try { localStorage.setItem("af_visit_date", today); } catch (e) { /* ignore */ } }
+    }).catch(function () { clearTimeout(timer); });
+  } catch (e) { /* never break the page */ }
+})();
+</script>
 </body>
 </html>

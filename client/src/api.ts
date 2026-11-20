@@ -701,6 +701,134 @@ async function submitMessage(args: {
   return { ok: true };
 }
 
+// ---------- visitor statistics ----------
+
+export interface VisitorStatsOut {
+  total: number;
+  today: number;
+  last7: number;
+  last30: number;
+  daily: { date: string; count: number }[];
+}
+
+// Anonymous visitor id (a random UUID kept in the visitor's own browser)
+// and the UTC day already recorded. No personal data is stored anywhere.
+const VISITOR_ID_KEY = "af_visitor_id";
+const VISIT_DATE_KEY = "af_visit_date";
+
+// Known crawlers/bots (plus headless browsers). Best effort: a bot that
+// pretends to be a normal browser cannot be told apart client-side.
+const BOT_RE =
+  /bot|crawl|spider|slurp|facebookexternalhit|twitterbot|linkedinbot|embedly|quora|pinterest|slackbot|telegrambot|whatsapp|discordbot|googlebot|bingbot|yandex|baidu|duckduckbot|ahrefsbot|semrushbot|mj12bot|petalbot|bytespider|gptbot|claudebot|ccbot|anthropic|perplexitybot|headless/i;
+
+function getOrCreateVisitorId(): string {
+  try {
+    const existing = localStorage.getItem(VISITOR_ID_KEY);
+    if (existing && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(existing)) return existing;
+  } catch {
+    /* storage unavailable — fall through to an in-memory id */
+  }
+  const id =
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+          const r = (Math.random() * 16) | 0;
+          return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
+        });
+  try {
+    localStorage.setItem(VISITOR_ID_KEY, id);
+  } catch {
+    /* ignore */
+  }
+  return id;
+}
+
+// The UTC day, so the client and the database (CURRENT_DATE) always agree.
+function todayUtc(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function isBotVisitor(): boolean {
+  try {
+    if (typeof navigator === "undefined") return false;
+    if ((navigator as Navigator & { webdriver?: boolean }).webdriver === true) return true;
+    return BOT_RE.test(navigator.userAgent || "");
+  } catch {
+    return false;
+  }
+}
+
+// Record one visit for this anonymous visitor, at most once per UTC day.
+// Fire-and-forget by design: any failure (table not set up yet, network
+// down, blocked request) is swallowed so the site never breaks. The
+// database's UNIQUE(visitor_id, visit_date) + the upsert below make the
+// recording idempotent even if the request is sent twice.
+async function recordVisit(_args: Record<string, never>): Promise<void> {
+  try {
+    if (typeof window === "undefined" || isBotVisitor()) return;
+    const today = todayUtc();
+    try {
+      if (localStorage.getItem(VISIT_DATE_KEY) === today) return;
+    } catch {
+      /* storage unavailable — continue; the database still dedups */
+    }
+    // Admins never count: a logged-in admin browsing the public site.
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (session?.user?.email === ADMIN_EMAIL) return;
+
+    const visitorId = getOrCreateVisitorId();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    let res: Response;
+    try {
+      res = await fetch(`${SUPABASE_URL}/rest/v1/visits?on_conflict=visitor_id,visit_date`, {
+        method: "POST",
+        headers: {
+          apikey: SUPABASE_PUBLISHABLE_KEY,
+          Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+          "Content-Type": "application/json",
+          Prefer: "return=minimal,resolution=ignore-duplicates",
+        },
+        body: JSON.stringify({
+          visitor_id: visitorId,
+          visit_date: today,
+          created_at: new Date().toISOString(),
+        }),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+    // Mark the day only after the server accepted it, so a failed request
+    // is retried on the next page load.
+    if (res.ok) {
+      try {
+        localStorage.setItem(VISIT_DATE_KEY, today);
+      } catch {
+        /* ignore */
+      }
+    }
+  } catch {
+    /* never break the site */
+  }
+}
+
+async function getVisitorStats(_args: { token: string }): Promise<VisitorStatsOut> {
+  await requireAdmin();
+  const { data, error } = await supabase.rpc("get_visitor_stats");
+  if (error) throw error;
+  const d = (data ?? {}) as Partial<VisitorStatsOut>;
+  return {
+    total: typeof d.total === "number" ? d.total : 0,
+    today: typeof d.today === "number" ? d.today : 0,
+    last7: typeof d.last7 === "number" ? d.last7 : 0,
+    last30: typeof d.last30 === "number" ? d.last30 : 0,
+    daily: Array.isArray(d.daily) ? d.daily : [],
+  };
+}
+
 // ---------- admin auth ----------
 
 async function adminStatus(_args: Record<string, never>): Promise<{ configured: boolean }> {
@@ -1277,6 +1405,8 @@ export const api = {
   listPosts,
   getPost,
   submitMessage,
+  recordVisit,
+  getVisitorStats,
   adminStatus,
   setupAdminPin,
   loginAdmin,

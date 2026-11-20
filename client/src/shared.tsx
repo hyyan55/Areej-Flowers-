@@ -32,6 +32,23 @@ export function formatDateTime(iso: string | null, lang: Lang): string {
   });
 }
 
+// Visitor statistics: expand sparse daily counts into a full series of the
+// last `days` UTC days (oldest first), filling days without visits with 0.
+export function buildDailySeries(
+  daily: { date: string; count: number }[],
+  days = 30,
+): { date: string; count: number }[] {
+  const byDate = new Map(daily.map((d) => [d.date, d.count]));
+  const out: { date: string; count: number }[] = [];
+  const now = new Date();
+  const base = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  for (let i = days - 1; i >= 0; i--) {
+    const key = new Date(base - i * 24 * 3600 * 1000).toISOString().slice(0, 10);
+    out.push({ date: key, count: byDate.get(key) ?? 0 });
+  }
+  return out;
+}
+
 function fileToBase64(file: File): Promise<{ dataBase64: string; mimeType: string }> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
