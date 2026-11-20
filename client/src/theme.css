@@ -57,8 +57,15 @@
   button, [role="button"], select, summary, a, input:not([type="checkbox"], [type="radio"]), textarea {
     min-height: 2.25rem;
   }
-  html { scroll-behavior: smooth; }
-  body { font-family: var(--font-body); }
+  html { scroll-behavior: smooth; overflow-x: clip; }
+  /* The page must always fit the screen like a normal page: a few
+     elements (e.g. the stats chart's day labels, wider than their
+     ~10px columns) stick out by a few px, which made the whole page
+     wider than the viewport so it looked zoomed with extra parts
+     sticking out sideways. Clipping the root contains that overflow
+     instead of letting the page scroll horizontally. (clip, not
+     hidden, so the sticky header keeps working.) */
+  body { font-family: var(--font-body); overflow-x: clip; }
 }
 
 .app-root {
