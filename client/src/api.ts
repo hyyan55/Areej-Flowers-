@@ -769,9 +769,15 @@ function isBotVisitor(): boolean {
 
 // Record one visit for this anonymous visitor, at most once per UTC day.
 // Fire-and-forget by design: any failure (table not set up yet, network
-// down, blocked request) is swallowed so the site never breaks. The
-// database's UNIQUE(visitor_id, visit_date) + the upsert below make the
-// recording idempotent even if the request is sent twice.
+// down, blocked request) is swallowed so the site never breaks.
+//
+// Plain INSERT, not an upsert: PostgREST's upsert (on_conflict +
+// resolution=ignore-duplicates) needs SELECT permission on the table to
+// detect conflicts, which visitors deliberately do NOT have under RLS —
+// so every upsert was rejected with 42501 even though the INSERT policy
+// is correct. A plain insert works, and the database's
+// UNIQUE(visitor_id, visit_date) still prevents duplicates: a repeat
+// insert comes back 409, which we treat as "already recorded".
 async function recordVisit(_args: Record<string, never>): Promise<void> {
   try {
     if (typeof window === "undefined" || isBotVisitor()) return;
@@ -792,13 +798,13 @@ async function recordVisit(_args: Record<string, never>): Promise<void> {
     const timer = setTimeout(() => controller.abort(), 8000);
     let res: Response;
     try {
-      res = await fetch(`${SUPABASE_URL}/rest/v1/visits?on_conflict=visitor_id,visit_date`, {
+      res = await fetch(`${SUPABASE_URL}/rest/v1/visits`, {
         method: "POST",
         headers: {
           apikey: SUPABASE_PUBLISHABLE_KEY,
           Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
           "Content-Type": "application/json",
-          Prefer: "return=minimal,resolution=ignore-duplicates",
+          Prefer: "return=minimal",
         },
         body: JSON.stringify({
           visitor_id: visitorId,
@@ -810,9 +816,10 @@ async function recordVisit(_args: Record<string, never>): Promise<void> {
     } finally {
       clearTimeout(timer);
     }
-    // Mark the day only after the server accepted it, so a failed request
-    // is retried on the next page load.
-    if (res.ok) {
+    // Mark the day after the server accepted the visit — or after it said
+    // the visit is already recorded (409): either way the visit is counted,
+    // so a failed request is retried on the next page load, not a duplicate.
+    if (res.ok || res.status === 409) {
       try {
         localStorage.setItem(VISIT_DATE_KEY, today);
       } catch {

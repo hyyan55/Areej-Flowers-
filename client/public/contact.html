@@ -211,19 +211,23 @@
     }
     var controller = new AbortController();
     var timer = setTimeout(function () { controller.abort(); }, 8000);
-    fetch("https://brpfiahribknkoqxzcch.supabase.co/rest/v1/visits?on_conflict=visitor_id,visit_date", {
+    // Plain INSERT, not an upsert: the upsert needs SELECT permission on
+    // the table to detect conflicts, which visitors do NOT have under RLS,
+    // so every upsert was rejected even though the INSERT policy is right.
+    // A duplicate insert comes back 409 and counts as "already recorded".
+    fetch("https://brpfiahribknkoqxzcch.supabase.co/rest/v1/visits", {
       method: "POST",
       headers: {
         "apikey": "sb_publishable_lAAaaAB7EqYn5UaKBpVeJA_-3Ww2KCH",
         "Authorization": "Bearer sb_publishable_lAAaaAB7EqYn5UaKBpVeJA_-3Ww2KCH",
         "Content-Type": "application/json",
-        "Prefer": "return=minimal,resolution=ignore-duplicates"
+        "Prefer": "return=minimal"
       },
       body: JSON.stringify({ visitor_id: visitorId, visit_date: today, created_at: new Date().toISOString() }),
       signal: controller.signal
     }).then(function (res) {
       clearTimeout(timer);
-      if (res.ok) { try { localStorage.setItem("af_visit_date", today); } catch (e) { /* ignore */ } }
+      if (res.ok || res.status === 409) { try { localStorage.setItem("af_visit_date", today); } catch (e) { /* ignore */ } }
     }).catch(function () { clearTimeout(timer); });
   } catch (e) { /* never break the page */ }
 })();

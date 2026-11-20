@@ -12,9 +12,13 @@
 --     no personal data of any kind is stored.
 --   * The visitor id is a random UUID generated in the visitor's own browser
 --     and kept in their localStorage; it cannot be traced back to a person.
---   * A UNIQUE(visitor_id, visit_date) constraint + the upsert in the code
---     make recording idempotent: refreshes and repeated requests never
---     create a second row for the same visitor on the same day.
+--   * A UNIQUE(visitor_id, visit_date) constraint + a plain INSERT in the
+--     code make recording idempotent: a repeat insert comes back 409
+--     ("already recorded"), which the client treats as success. Do NOT
+--     use an upsert (on_conflict + resolution=ignore-duplicates) here:
+--     it needs SELECT permission on the table to detect conflicts, which
+--     visitors deliberately do NOT have under RLS, so every upsert was
+--     rejected with 42501 even though the INSERT policy is correct.
 --   * RLS: anyone may INSERT one row per day (guarded by a UUID-format check
 --     and a visit_date window of yesterday..today); only the admin may
 --     SELECT or DELETE. The dashboard reads aggregates through the
