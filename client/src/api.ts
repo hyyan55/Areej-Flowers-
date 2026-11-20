@@ -718,8 +718,13 @@ const VISIT_DATE_KEY = "af_visit_date";
 
 // Known crawlers/bots (plus headless browsers). Best effort: a bot that
 // pretends to be a normal browser cannot be told apart client-side.
+// NOTE: in-app browsers (WhatsApp, Pinterest, Baidu app, ...) are REAL human
+// browsers, so only their crawlers are listed here. The WhatsApp link-preview
+// crawler's UA starts with "WhatsApp/", while the in-app browser's UA is a
+// full Mozilla string with WhatsApp appended — so it is checked separately
+// with an anchored pattern below.
 const BOT_RE =
-  /bot|crawl|spider|slurp|facebookexternalhit|twitterbot|linkedinbot|embedly|quora|pinterest|slackbot|telegrambot|whatsapp|discordbot|googlebot|bingbot|yandex|baidu|duckduckbot|ahrefsbot|semrushbot|mj12bot|petalbot|bytespider|gptbot|claudebot|ccbot|anthropic|perplexitybot|headless/i;
+  /bot|crawl|spider|slurp|facebookexternalhit|twitterbot|linkedinbot|embedly|quorabot|pinterestbot|slackbot|telegrambot|discordbot|googlebot|bingbot|yandex|baiduspider|duckduckbot|ahrefsbot|semrushbot|mj12bot|petalbot|bytespider|gptbot|claudebot|ccbot|anthropic|perplexitybot|headless/i;
 
 function getOrCreateVisitorId(): string {
   try {
@@ -752,7 +757,11 @@ function isBotVisitor(): boolean {
   try {
     if (typeof navigator === "undefined") return false;
     if ((navigator as Navigator & { webdriver?: boolean }).webdriver === true) return true;
-    return BOT_RE.test(navigator.userAgent || "");
+    const ua = navigator.userAgent || "";
+    // WhatsApp's link-preview crawler (its UA starts with "WhatsApp/");
+    // the WhatsApp in-app browser is a normal Mozilla UA and must count.
+    if (/^WhatsApp\//i.test(ua)) return true;
+    return BOT_RE.test(ua);
   } catch {
     return false;
   }

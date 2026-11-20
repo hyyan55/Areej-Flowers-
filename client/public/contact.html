@@ -187,8 +187,13 @@
   // The contact page is a public entry point, so it records visits too —
   // except for logged-in admins (a Supabase auth token in localStorage).
   try {
-    var BOT_RE = /bot|crawl|spider|slurp|facebookexternalhit|twitterbot|linkedinbot|embedly|quora|pinterest|slackbot|telegrambot|whatsapp|discordbot|googlebot|bingbot|yandex|baidu|duckduckbot|ahrefsbot|semrushbot|mj12bot|petalbot|bytespider|gptbot|claudebot|ccbot|anthropic|perplexitybot|headless/i;
-    if (BOT_RE.test(navigator.userAgent || "") || navigator.webdriver === true) return;
+    // In-app browsers (WhatsApp, Pinterest, Baidu app, ...) are REAL human
+    // browsers: only their crawlers are excluded. The WhatsApp link-preview
+    // crawler's UA starts with "WhatsApp/", the in-app browser's is a full
+    // Mozilla string with WhatsApp appended.
+    var BOT_RE = /bot|crawl|spider|slurp|facebookexternalhit|twitterbot|linkedinbot|embedly|quorabot|pinterestbot|slackbot|telegrambot|discordbot|googlebot|bingbot|yandex|baiduspider|duckduckbot|ahrefsbot|semrushbot|mj12bot|petalbot|bytespider|gptbot|claudebot|ccbot|anthropic|perplexitybot|headless/i;
+    var ua = navigator.userAgent || "";
+    if (/^WhatsApp\//i.test(ua) || BOT_RE.test(ua) || navigator.webdriver === true) return;
     var isAdmin = false;
     for (var i = 0; i < localStorage.length; i++) {
       if (/^sb-.*-auth-token$/.test(localStorage.key(i) || "")) { isAdmin = true; break; }
