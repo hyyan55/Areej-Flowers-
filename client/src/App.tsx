@@ -988,15 +988,15 @@ function ContactPage({ t, settings }: { t: (typeof STRINGS)["ar"]; settings: Api
 
   return (
     <div className="max-w-2xl mx-auto px-4" style={{ paddingTop: "var(--space-section)", paddingBottom: "var(--space-section)" }}>
-      <h1 className="font-display text-4xl font-extrabold fade-up" style={{ color: "var(--accent)" }}>{t.contactTitle}</h1>
-      <p className="dim mt-3 leading-loose fade-up">{t.contactIntro}</p>
+      <h1 className="font-display text-4xl font-extrabold" style={{ color: "var(--accent)" }}>{t.contactTitle}</h1>
+      <p className="dim mt-3 leading-loose">{t.contactIntro}</p>
       <SocialLinks links={settings.social_links} t={t} className="mt-5" />
       {sent ? (
-        <div className="card p-6 mt-8 text-center fade-in" role="status">
+        <div className="card p-6 mt-8 text-center" role="status">
           <p className="font-bold text-lg" style={{ color: "var(--accent)" }}>{t.messageSent}</p>
         </div>
       ) : (
-        <form onSubmit={submit} className="card p-6 mt-8 grid gap-4 fade-up" noValidate>
+        <form onSubmit={submit} className="card p-6 mt-8 grid gap-4" noValidate>
           <div>
             <label htmlFor="c-name" className="label">{t.yourName} *</label>
             <input id="c-name" className="input" {...FIELDS.submitMessage.name} value={name} onChange={(e) => setName(e.target.value)} required />
