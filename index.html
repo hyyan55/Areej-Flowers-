@@ -456,6 +456,12 @@ async function all(store){
   const {data,error}=await supabase.from(DB_TABLE[store]).select('*').order('id',{ascending:true});
   if(error)throw error;return (data||[]).map(row=>fromRow(store,row));
 }
+/* Public reads: fetch only published articles from the server, so drafts never leave the DB. */
+async function listPublishedPosts(){
+  const {data,error}=await supabase.from('articles').select('*').eq('status','published').order('id',{ascending:true});
+  if(error)throw error;
+  return (data||[]).map(row=>fromRow('posts',row));
+}
 async function put(store,val){
   if(store==='settings'||store==='profile'){
     const table=store==='settings'?'site_settings':'profiles',key=store==='settings'?'site':'profile';
@@ -503,8 +509,38 @@ async function saveSettings(patch){const cur=(await getSettings())||{};const nex
 async function getProfile(){return await get('profile',1);}
 async function saveProfile(patch){const cur=(await getProfile())||{};const next=Object.assign({},cur,patch,{id:1});await put('profile',next);return next;}
 
+/* ================= Built-in defaults (used when the DB has no settings/profile rows) ================= */
+/* Same real facts as the seed below. They live only in memory; nothing is written to the DB for visitors. */
+const DEFAULT_SETTINGS = {id: 1, siteName: 'Areej Flowers', siteNameEn: 'Areej Flowers',
+  taglineAr: 'مساحة للكلمات، والمعرفة، والأثر الجميل.',
+  taglineEn: 'A space for words, knowledge, and a beautiful impact.',
+  footerAr: 'مدونة أريج خضر محمد النور — كاتبة وصانعة محتوى تعليمي وتثقيفي.',
+  footerEn: 'The blog of Areej Khader Mohammed Alnoor — writer and educational content creator.',
+  preset: 'lavender', mode: 'light', lang: 'ar',
+  headerIdentity: 'logo', logoId: null, favicon: null,
+  customColors: {}, social: {}, aboutPhotoNote: ''};
+const DEFAULT_PROFILE = {id: 1,
+  nameAr: 'أريج خضر محمد النور', nameEn: 'Areej Khader Mohammed Alnoor',
+  levelAr: 'طالبة في المستوى الثاني، كلية الطب، جامعة الشرق للعلوم والتكنولوجيا',
+  levelEn: 'Second-year student, Faculty of Medicine, East University for Science and Technology',
+  cityAr: 'كسلا، السودان', cityEn: 'Kassala, Sudan',
+  bioAr: 'كاتبة وصانعة محتوى تعليمي وتثقيفي من مدينة كسلا، السودان. أشارك كتاباتي ومعرفتي وتأملاتي في هذه المساحة، إيماناً بأن وراء كل محتوى رسالة وهدفاً نبيلاً.',
+  bioEn: 'A writer and creator of educational and awareness content from Kassala, Sudan. I share my writings, knowledge and reflections in this space, believing that behind every piece of content there is a message and a noble purpose.',
+  philosophyAr: 'أؤمن بأن وراء كل محتوى رسالة وهدفاً نبيلاً، وأن الكلمة الصادقة والمعرفة النافعة قادرتان على ترك أثر جميل في حياة الآخرين.',
+  philosophyEn: 'I believe that behind every piece of content there is a message and a noble purpose, and that an honest word and useful knowledge can leave a beautiful impact on the lives of others.',
+  writingAr: 'أكتب في الأدب والتأملات والخواطر، وأهتم بالكتابة الصادقة التي تلامس القارئ وتترك أثراً.',
+  writingEn: 'I write literature, reflections and short thoughts, and I care about honest writing that touches the reader and leaves an impact.',
+  eduAr: 'أهتم بتبسيط المعرفة الطبية والصحية ونشر الوعي بأسلوب واضح ومبسط.',
+  eduEn: 'I care about simplifying medical and health knowledge and spreading awareness in a clear, simple style.',
+  photoId: null};
+
 /* ================= Seed (real facts only + clearly badged samples) ================= */
 async function seedIfNeeded(){
+  /* Seeding writes to the DB, so only an admin session may do it. Visitors never write. */
+  let isAdmin=false;
+  try{ isAdmin=await adminAuthed(); }catch(e){ return; }
+  if(!isAdmin) return;
+  try{
   const s = await getSettings();
   if (s) return;
   await put('profile', {id: 1,
@@ -559,6 +595,7 @@ async function seedIfNeeded(){
      seoTitle: 'من دفتر اليوم: لحظة هدوء | Areej Flowers', seoDescription: 'تأمل قصير في لحظات الهدوء.'}
   ];
   for (const p of samples) await put('posts', p);
+  }catch(e){ /* seeding is best-effort; a failed seed must never block rendering */ }
 }
 
 /* ================= Theme engine ================= */
@@ -585,16 +622,19 @@ function applyTheme(){
   const mb = $('#modeBtn'); if (mb) mb.textContent = mode === 'dark' ? '☀️' : '🌙';
 }
 async function setMode(mode){
-  window.__settings = await saveSettings({mode});
+  window.__settings = Object.assign({}, window.__settings, {mode});
+  try { localStorage.setItem('af_mode', mode); } catch(e){}
+  try { window.__settings = await saveSettings({mode}); } catch(e){ /* visitors cannot write site settings (RLS); the local preference above applies */ }
   applyTheme();
 }
 async function setLang(lang){
   LANG = lang;
-  window.__settings = await saveSettings({lang});
+  window.__settings = Object.assign({}, window.__settings, {lang});
+  try { localStorage.setItem('af_lang', lang); } catch(e){}
+  try { window.__settings = await saveSettings({lang}); } catch(e){ /* visitors cannot write site settings (RLS); the local preference above applies */ }
   document.documentElement.setAttribute('lang', lang);
   document.documentElement.setAttribute('dir', lang === 'ar' ? 'rtl' : 'ltr');
   const lb = $('#langBtn'); if (lb) lb.textContent = lang === 'ar' ? 'EN' : 'عربي';
-  try { localStorage.setItem('af_lang', lang); } catch(e){}
   render();
 }
 
@@ -727,7 +767,7 @@ async function renderHome(){
   const app = $('#app');
   const settings = window.__settings || {};
   const profile = window.__profile || {};
-  const posts = (await all('posts')).filter(p => p.status === 'published').sort((a, b) => b.publishedAt - a.publishedAt);
+  const posts = (await listPublishedPosts()).sort((a, b) => b.publishedAt - a.publishedAt);
   const cats = await all('categories');
   await enrichPosts(posts);
   const featured = posts.find(p => p.featured) || posts[0];
@@ -780,7 +820,7 @@ async function renderWritings(){
   const app = $('#app');
   const settings = window.__settings || {};
   setMeta(t('nav.writings') + ' | ' + (settings.siteName || 'Areej Flowers'), t('nav.writings'));
-  const posts = (await all('posts')).filter(p => p.status === 'published').sort((a, b) => b.publishedAt - a.publishedAt);
+  const posts = (await listPublishedPosts()).sort((a, b) => b.publishedAt - a.publishedAt);
   const cats = await all('categories');
   await enrichPosts(posts);
   app.innerHTML = '<div class="page-head"><span class="section-label">✿ ' + esc(t('nav.writings')) + '</span><h1>' + esc(t('nav.writings')) + '</h1></div>' +
@@ -817,7 +857,7 @@ async function renderSection(section){
   const settings = window.__settings || {};
   const isEdu = section === 'educational';
   setMeta(t(isEdu ? 'nav.educational' : 'nav.journal') + ' | ' + (settings.siteName || 'Areej Flowers'), t(isEdu ? 'nav.educational' : 'nav.journal'));
-  const posts = (await all('posts')).filter(p => p.status === 'published' && p.section === section).sort((a, b) => b.publishedAt - a.publishedAt);
+  const posts = (await listPublishedPosts()).filter(p => p.section === section).sort((a, b) => b.publishedAt - a.publishedAt);
   const cats = await all('categories');
   await enrichPosts(posts);
   app.innerHTML = '<div class="page-head"><span class="section-label">✿ ' + esc(t(isEdu ? 'nav.educational' : 'nav.journal')) + '</span><h1>' + esc(t(isEdu ? 'nav.educational' : 'nav.journal')) + '</h1>' +
@@ -828,13 +868,13 @@ async function renderSection(section){
 async function renderArticle(slug){
   const app = $('#app');
   const settings = window.__settings || {};
-  const posts = await all('posts');
-  const p = posts.find(x => x.slug === slug && x.status === 'published');
+  const posts = await listPublishedPosts();
+  const p = posts.find(x => x.slug === slug);
   if (!p){ app.innerHTML = '<div class="empty-state"><div class="big">✿</div><p>' + esc(t('no.results')) + '</p><p><a class="btn btn-primary" href="#/writings">' + esc(t('browse.posts')) + '</a></p></div>'; return; }
   const cats = await all('categories');
   await enrichPosts([p]);
   const cat = cats.find(c => c.id === p.categoryId);
-  const related = posts.filter(x => x.status === 'published' && x.id !== p.id && x.categoryId === p.categoryId).slice(0, 3);
+  const related = posts.filter(x => x.id !== p.id && x.categoryId === p.categoryId).slice(0, 3);
   await enrichPosts(related);
   setMeta((p.seoTitle || postTitle(p, LANG)) + ' | ' + (settings.siteName || 'Areej Flowers'), p.seoDescription || postExcerpt(p, LANG) || '');
   app.innerHTML = '<article class="article-wrap section">' +
@@ -1476,9 +1516,21 @@ window.addEventListener('hashchange', render);
 (async function init(){
   const {data:{session}}=await supabase.auth.getSession();
   if(session&&recoveryMode){renderAdminPasswordRecovery();return;}
-  await seedIfNeeded();
-  window.__settings = await getSettings();
-  window.__profile = await getProfile();
+  try{ await seedIfNeeded(); }catch(e){ /* a failed seed must never block rendering */ }
+  let settings=null, profile=null;
+  try{ settings=await getSettings(); }catch(e){ /* fall back to built-in defaults below */ }
+  try{ profile=await getProfile(); }catch(e){ /* fall back to built-in defaults below */ }
+  window.__settings = settings || Object.assign({}, DEFAULT_SETTINGS);
+  window.__profile = profile || Object.assign({}, DEFAULT_PROFILE);
+  /* Per-device visitor preferences (localStorage) win over the shared site defaults */
+  try {
+    const lsMode = localStorage.getItem('af_mode');
+    const lsLang = localStorage.getItem('af_lang');
+    const lsPreset = localStorage.getItem('af_preset');
+    if (lsMode) window.__settings.mode = lsMode;
+    if (lsLang) window.__settings.lang = lsLang;
+    if (lsPreset) window.__settings.preset = lsPreset;
+  } catch(e){}
   LANG = window.__settings.lang || 'ar';
   document.documentElement.setAttribute('lang', LANG);
   document.documentElement.setAttribute('dir', LANG === 'ar' ? 'rtl' : 'ltr');
