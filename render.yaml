@@ -10,6 +10,12 @@ services:
     buildCommand: npm install && npm run build
     staticPublishPath: dist
     routes:
+      # Lightweight static contact page (client/public/contact.html): it must
+      # be served directly so /contact opens instantly without the JS bundle.
+      # Rules are matched in order, so this goes BEFORE the SPA catch-all.
+      - type: rewrite
+        source: /contact
+        destination: /contact.html
       - type: rewrite
         source: /*
         destination: /index.html

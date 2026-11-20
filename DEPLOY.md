@@ -21,13 +21,18 @@
 2. في Render اختر **New → Static Site** واختر المستودع، ثم املأ الإعدادات:
    - **Build Command:** `npm install && npm run build`
    - **Publish Directory:** `dist`
-3. **مهم — قاعدة إعادة التوجيه (SPA rewrite):** ملف `render.yaml` يعمل فقط
+3. **مهم — قواعد إعادة التوجيه (rewrites):** ملف `render.yaml` يعمل فقط
    إن نشرت عبر Blueprint، أما إن أنشأت الموقع يدوياً فتجاهله Render. لذلك
-   أضف القاعدة يدوياً من لوحة Render: **Settings → Redirects/Rewrites →
-   Add Rule** — ‏Source: `/*`‏، ‏Destination: `/index.html`‏، ‏Action:
-   Rewrite‏. بدونها تعود أي صفحة مباشرة (مثل `/admin`) بخطأ Not Found.
-   (إن نشرت عبر **New → Blueprint** فالقاعدة موجودة أصلاً في `render.yaml`
-   — تأكد فقط من ظهورها في الإعدادات.)
+   أضف القاعدتين يدوياً من لوحة Render: **Settings → Redirects/Rewrites →
+   Add Rule** — بالترتيب التالي (الترتيب مهم: تُطابَق القواعد من الأعلى):
+   - ‏Source: `/contact`‏، ‏Destination: `/contact.html`‏، ‏Action:
+     Rewrite‏ — هذه صفحة تواصل خفيفة مستقلة
+     (`client/public/contact.html`) بلا حزمة جافاسكربت، تفتح فوراً حتى على
+     أبطأ اتصال، وترسل الرسالة مباشرة إلى Supabase.
+   - ‏Source: `/*`‏، ‏Destination: `/index.html`‏، ‏Action:
+     Rewrite‏. بدونها تعود أي صفحة مباشرة (مثل `/admin`) بخطأ Not Found.
+   (إن نشرت عبر **New → Blueprint** فالقاعدتان موجودتان أصلاً في
+   `render.yaml` — تأكد فقط من ظهورهما في الإعدادات وبهذا الترتيب.)
 4. اضغط **Create Static Site** وانتظر اكتمال البناء حتى تظهر حالة Live.
    إن لم يبدأ نشر جديد بعد دفع commit إلى GitHub، فالنشر التلقائي متوقف:
    من لوحة الخدمة اضغط **Manual Deploy → Deploy latest commit** (أو

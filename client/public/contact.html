@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<meta name="description" content="تواصل معي — أريج خضر محمد النور. أرسل رسالتك وستصل مباشرة إلى لوحة تحكم الموقع." />
+<title>تواصل معي | Areej Flowers</title>
+<style>
+  /* صفحة تواصل خفيفة مستقلة: بلا أي ملف جافاسكربت خارجي وبلا خطوط خارجية،
+     لتفتح فوراً حتى على أبطأ اتصال. ترسل الرسالة مباشرة إلى Supabase. */
+  :root {
+    --accent: #79509B; --accent-deep: #49305F; --bg: #F8F3FA; --card: #ffffff;
+    --text: #241a2e; --dim: #6b5a78; --border: #e3d8ec; --input-bg: #fdfaff;
+    --danger: #b3261e;
+  }
+  [data-theme="dark"] {
+    --accent: #A77BC5; --accent-deep: #C7A9DF; --bg: #211827; --card: #2d2138;
+    --text: #f3eef7; --dim: #b9a8c6; --border: #453452; --input-bg: #261b31;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: "Segoe UI", Tahoma, "Noto Sans Arabic", Arial, sans-serif;
+    line-height: 1.8;
+  }
+  header {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    max-width: 960px; margin: 0 auto; padding: 14px 16px;
+  }
+  .brand { font-weight: 800; font-size: 20px; color: var(--accent-deep); text-decoration: none; white-space: nowrap; }
+  nav { display: flex; gap: 4px; flex-wrap: wrap; }
+  nav a {
+    color: var(--dim); text-decoration: none; font-size: 14px; font-weight: 600;
+    padding: 6px 10px; border-radius: 999px;
+  }
+  nav a.active { background: var(--accent); color: #fff; }
+  main { max-width: 640px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { color: var(--accent); font-size: 34px; margin: 8px 0 4px; line-height: 1.3; }
+  .intro { color: var(--dim); margin: 0 0 24px; }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+    padding: 24px; box-shadow: 0 4px 24px rgba(73, 48, 95, .06);
+  }
+  label { display: block; font-weight: 700; font-size: 14px; margin: 0 0 6px; }
+  input, textarea {
+    width: 100%; border: 1px solid var(--border); border-radius: 10px;
+    background: var(--input-bg); color: var(--text);
+    font: inherit; font-size: 15px; padding: 10px 12px; margin-bottom: 16px;
+  }
+  input:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
+  textarea { min-height: 140px; resize: vertical; }
+  .hp { position: absolute; left: -9999px; top: auto; width: 1px; height: 1px; overflow: hidden; }
+  button {
+    width: 100%; border: 0; border-radius: 12px; padding: 13px;
+    background: var(--accent); color: #fff; font: inherit; font-weight: 800; font-size: 16px;
+    cursor: pointer;
+  }
+  button:disabled { opacity: .6; cursor: wait; }
+  .msg { display: none; border-radius: 12px; padding: 14px 16px; margin-top: 16px; font-weight: 600; }
+  .msg.show { display: block; }
+  .msg.ok { background: #e9f6ec; color: #1d5c2e; border: 1px solid #bfe3c6; }
+  [data-theme="dark"] .msg.ok { background: #1e3a26; color: #bfe8c8; border-color: #2f5a3c; }
+  .msg.err { background: #fdecea; color: var(--danger); border: 1px solid #f5c6c0; }
+  [data-theme="dark"] .msg.err { background: #3d1f1c; color: #f3b8b2; border-color: #5c2f2a; }
+  footer { text-align: center; color: var(--dim); font-size: 13px; padding: 0 16px 32px; }
+  @media (max-width: 560px) {
+    header { flex-direction: column; align-items: flex-start; gap: 6px; }
+    h1 { font-size: 28px; }
+  }
+</style>
+<script>
+  // يطابق وضع الموقع المحفوظ (فاتح/داكن) إن وجد، وإلا يتبع نظام الجهاز.
+  (function () {
+    try {
+      var saved = localStorage.getItem("areej-appearance");
+      var theme = saved === "dark" || saved === "light" ? saved
+        : (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+      document.documentElement.setAttribute("data-theme", theme);
+    } catch (e) { /* يبقى الوضع الفاتح */ }
+  })();
+</script>
+</head>
+<body>
+<header>
+  <a class="brand" href="/">Areej Flowers</a>
+  <nav>
+    <a href="/">الرئيسية</a>
+    <a href="/writings">كتاباتي</a>
+    <a href="/educational">تعليمي</a>
+    <a href="/journal">يومياتي</a>
+    <a href="/contact" class="active">تواصل معي</a>
+  </nav>
+</header>
+<main>
+  <h1>تواصل معي</h1>
+  <p class="intro">يسعدني تواصلك ورسائلك. املأ النموذج أدناه وستصل رسالتك مباشرة إلى لوحة تحكم الموقع.</p>
+  <div class="card">
+    <form id="contact-form" novalidate>
+      <label for="c-name">الاسم *</label>
+      <input id="c-name" name="name" type="text" required minlength="2" autocomplete="name" />
+      <label for="c-subject">الموضوع *</label>
+      <input id="c-subject" name="subject" type="text" required minlength="2" />
+      <label for="c-body">الرسالة *</label>
+      <textarea id="c-body" name="body" required minlength="5"></textarea>
+      <input class="hp" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" />
+      <button id="send-btn" type="submit">إرسال الرسالة</button>
+    </form>
+    <div id="ok" class="msg ok" role="status">شكراً لك! وصلتني رسالتك وسأردّ قريباً بإذن الله.</div>
+    <div id="err" class="msg err" role="alert"></div>
+  </div>
+</main>
+<footer>Areej Flowers — أريج خضر محمد النور</footer>
+<script>
+(function () {
+  var SUPABASE_URL = "https://brpfiahribknkoqxzcch.supabase.co";
+  var KEY = "sb_publishable_lAAaaAB7EqYn5UaKBpVeJA_-3Ww2KCH"; // مفتاح عام — آمن نشره في الكود
+  var form = document.getElementById("contact-form");
+  var btn = document.getElementById("send-btn");
+  var okBox = document.getElementById("ok");
+  var errBox = document.getElementById("err");
+
+  function showError(text) { errBox.textContent = text; errBox.classList.add("show"); okBox.classList.remove("show"); }
+  function showOk() { okBox.classList.add("show"); errBox.classList.remove("show"); }
+
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    errBox.classList.remove("show");
+    // NOTE: never use form.name — HTMLFormElement.name is the form's own
+    // name attribute ("" here), not the input named "name". Use the IDs.
+    var name = document.getElementById("c-name").value.trim();
+    var subject = document.getElementById("c-subject").value.trim();
+    var body = document.getElementById("c-body").value.trim();
+    // Honeypot: إن مُلئ الحقل المخفي فهي رسالة آلية — نظهر النجاح دون تخزين.
+    if (form.querySelector('[name="website"]').value.trim()) { form.style.display = "none"; showOk(); return; }
+    if (name.length < 2) return showError("يرجى إدخال الاسم (حرفان على الأقل).");
+    if (subject.length < 2) return showError("يرجى إدخال الموضوع (حرفان على الأقل).");
+    if (body.length < 5) return showError("يرجى كتابة رسالة أطول قليلاً (5 أحرف على الأقل).");
+    // حدّ محلي: 5 رسائل كحد أقصى كل 10 دقائق (نفس قاعدة التطبيق).
+    var RATE_KEY = "af_msg_times";
+    var times = [];
+    try {
+      var parsed = JSON.parse(localStorage.getItem(RATE_KEY) || "[]");
+      if (Array.isArray(parsed)) times = parsed.filter(function (x) { return typeof x === "number"; });
+    } catch (err) { times = []; }
+    var now = Date.now();
+    times = times.filter(function (x) { return now - x < 10 * 60 * 1000; });
+    if (times.length >= 5) return showError("تم إرسال عدد كبير من الرسائل في وقت قصير. حاول مجدداً بعد قليل.");
+    times.push(now);
+    try { localStorage.setItem(RATE_KEY, JSON.stringify(times)); } catch (err) { /* تجاهل */ }
+
+    btn.disabled = true;
+    btn.textContent = "جارٍ الإرسال…";
+    var controller = new AbortController();
+    var timer = setTimeout(function () { controller.abort(); }, 12000);
+    fetch(SUPABASE_URL + "/rest/v1/messages", {
+      method: "POST",
+      headers: {
+        "apikey": KEY,
+        "Authorization": "Bearer " + KEY,
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal"
+      },
+      body: JSON.stringify({ name: name, subject: subject, body: body, is_read: false, created_at: new Date(now).toISOString() }),
+      signal: controller.signal
+    }).then(function (res) {
+      clearTimeout(timer);
+      if (!res.ok) throw new Error("bad status " + res.status);
+      form.style.display = "none";
+      showOk();
+    }).catch(function () {
+      clearTimeout(timer);
+      btn.disabled = false;
+      btn.textContent = "إرسال الرسالة";
+      showError("تعذّر إرسال الرسالة — تحقق من الاتصال وحاول مجدداً.");
+    });
+  });
+})();
+</script>
+</body>
+</html>
