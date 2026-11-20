@@ -432,57 +432,76 @@ const I18N = {
 let LANG = 'ar';
 const t = k => (I18N[LANG] && I18N[LANG][k]) || I18N.ar[k] || k;
 
-/* ================= IndexedDB ================= */
-const DB_NAME = 'areej-flowers';
-const DB_VERSION = 1;
-const STORES = ['posts', 'categories', 'media', 'messages', 'settings', 'profile', 'auth'];
-let dbp = null;
-function openDB(){
-  if (dbp) return dbp;
-  dbp = new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = e => {
-      const db = e.target.result;
-      STORES.forEach(s => { if (!db.objectStoreNames.contains(s)) db.createObjectStore(s, {keyPath: 'id', autoIncrement: true}); });
-    };
-    req.onsuccess = e => resolve(e.target.result);
-    req.onerror = () => reject(req.error);
-  });
-  return dbp;
+/* ================= Supabase data layer ================= */
+const STORES=['posts','categories','media','messages','settings','profile','auth'];
+const DB_TABLE={posts:'articles',categories:'categories',media:'media',messages:'messages'};
+const fromRow=(store,row)=>{
+  if(!row)return null;
+  if(store==='posts'||store==='categories')return Object.assign({},row.data||{},{id:Number(row.id)});
+  if(store==='messages')return {id:Number(row.id),name:row.name,subject:row.subject,body:row.body,read:!!row.is_read,createdAt:new Date(row.created_at).getTime()};
+  if(store==='media')return {id:Number(row.id),name:row.name,type:row.content_type,size:Number(row.size_bytes)||0,createdAt:new Date(row.created_at).getTime(),storagePath:row.storage_path};
+  return row.data||null;
+};
+async function get(store,id){
+  if(store==='auth')return null;
+  if(store==='settings'){const {data,error}=await supabase.from('site_settings').select('data').eq('id','site').maybeSingle();if(error)throw error;return data?.data?Object.assign({id:1},data.data):null;}
+  if(store==='profile'){const {data,error}=await supabase.from('profiles').select('data').eq('id','profile').maybeSingle();if(error)throw error;return data?.data?Object.assign({id:1},data.data):null;}
+  const table=DB_TABLE[store];let q=supabase.from(table).select('*').eq('id',Number(id)).maybeSingle();
+  const {data,error}=await q;if(error)throw error;return fromRow(store,data);
 }
-function put(store, val){ return openDB().then(db => new Promise((resolve, reject) => {
-  const t = db.transaction(store, 'readwrite'); const r = t.objectStore(store).put(val);
-  r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error);
-}));}
-function get(store, id){ return openDB().then(db => new Promise((resolve, reject) => {
-  const r = db.transaction(store, 'readonly').objectStore(store).get(id);
-  r.onsuccess = () => resolve(r.result || null); r.onerror = () => reject(r.error);
-}));}
-function all(store){ return openDB().then(db => new Promise((resolve, reject) => {
-  const r = db.transaction(store, 'readonly').objectStore(store).getAll();
-  r.onsuccess = () => resolve(r.result || []); r.onerror = () => reject(r.error);
-}));}
-function del(store, id){ return openDB().then(db => new Promise((resolve, reject) => {
-  const t = db.transaction(store, 'readwrite'); t.objectStore(store).delete(id);
-  t.oncomplete = () => resolve(); t.onerror = () => reject(t.error);
-}));}
-function clearStore(store){ return openDB().then(db => new Promise((resolve, reject) => {
-  const t = db.transaction(store, 'readwrite'); t.objectStore(store).clear();
-  t.oncomplete = () => resolve(); t.onerror = () => reject(t.error);
-}));}
-/* Settings / profile are single records with fixed id 'site' / 'profile' */
-async function getSettings(){ const s = await get('settings', 1); return s || null; }
-async function saveSettings(patch){
-  const cur = (await getSettings()) || {};
-  const next = Object.assign({}, cur, patch, {id: 1});
-  await put('settings', next); return next;
+async function all(store){
+  if(store==='auth')return [];
+  if(store==='settings'){const x=await get('settings',1);return x?[x]:[];}
+  if(store==='profile'){const x=await get('profile',1);return x?[x]:[];}
+  const {data,error}=await supabase.from(DB_TABLE[store]).select('*').order('id',{ascending:true});
+  if(error)throw error;return (data||[]).map(row=>fromRow(store,row));
 }
-async function getProfile(){ const p = await get('profile', 1); return p || null; }
-async function saveProfile(patch){
-  const cur = (await getProfile()) || {};
-  const next = Object.assign({}, cur, patch, {id: 1});
-  await put('profile', next); return next;
+async function put(store,val){
+  if(store==='settings'||store==='profile'){
+    const table=store==='settings'?'site_settings':'profiles',key=store==='settings'?'site':'profile';
+    const clean=Object.assign({},val);delete clean.id;
+    const {error}=await supabase.from(table).upsert({id:key,data:clean,updated_at:new Date().toISOString()});
+    if(error)throw error;return 1;
+  }
+  if(store==='messages'){
+    const payload={name:val.name,subject:val.subject,body:val.body,is_read:!!val.read,created_at:new Date(val.createdAt||Date.now()).toISOString()};
+    let q=val.id?supabase.from('messages').update(payload).eq('id',val.id).select('id').single():supabase.from('messages').insert(payload).select('id').single();
+    const {data,error}=await q;if(error)throw error;return Number(data.id);
+  }
+  if(store==='media'){
+    if(!val.blob)throw new Error('ملف الصورة غير متاح لإعادة الرفع.');
+    const path=Date.now().toString(36)+'-'+uid()+'-'+String(val.name||'image').replace(/[^a-zA-Z0-9._-]/g,'_');
+    const {error:uploadError}=await supabase.storage.from('areej-media').upload(path,val.blob,{contentType:val.type||val.blob.type,upsert:false});
+    if(uploadError)throw uploadError;
+    const {data,error}=await supabase.from('media').insert({name:val.name,storage_path:path,content_type:val.type||val.blob.type,size_bytes:val.size||val.blob.size}).select('id').single();
+    if(error){await supabase.storage.from('areej-media').remove([path]);throw error;}return Number(data.id);
+  }
+  if(store==='posts'||store==='categories'){
+    const clean=Object.assign({},val);delete clean.id;
+    if(store==='posts'){
+      const payload={slug:clean.slug,status:clean.status,published_at:new Date(clean.publishedAt||Date.now()).toISOString(),data:clean};
+      const q=val.id?supabase.from('articles').update(payload).eq('id',val.id).select('id').single():supabase.from('articles').insert(payload).select('id').single();
+      const {data,error}=await q;if(error)throw error;return Number(data.id);
+    }
+    const payload={slug:clean.slug,data:clean};
+    const q=val.id?supabase.from('categories').update(payload).eq('id',val.id).select('id').single():supabase.from('categories').insert(payload).select('id').single();
+    const {data,error}=await q;if(error)throw error;return Number(data.id);
+  }
+  throw new Error('Unsupported data store: '+store);
 }
+async function del(store,id){
+  if(store==='media'){
+    const item=await get('media',id);
+    if(item?.storagePath){const {error:e}=await supabase.storage.from('areej-media').remove([item.storagePath]);if(e)throw e;}
+  }
+  const table=DB_TABLE[store];if(!table)throw new Error('Unsupported data store: '+store);
+  const {error}=await supabase.from(table).delete().eq('id',Number(id));if(error)throw error;
+}
+async function clearStore(store){const items=await all(store);for(const item of items)await del(store,item.id);}
+async function getSettings(){return await get('settings',1);}
+async function saveSettings(patch){const cur=(await getSettings())||{};const next=Object.assign({},cur,patch,{id:1});await put('settings',next);return next;}
+async function getProfile(){return await get('profile',1);}
+async function saveProfile(patch){const cur=(await getProfile())||{};const next=Object.assign({},cur,patch,{id:1});await put('profile',next);return next;}
 
 /* ================= Seed (real facts only + clearly badged samples) ================= */
 async function seedIfNeeded(){
@@ -582,13 +601,12 @@ async function setLang(lang){
 /* ================= Media helpers ================= */
 const mediaUrlCache = new Map();
 async function mediaUrl(id){
-  if (!id) return null;
-  if (mediaUrlCache.has(id)) return mediaUrlCache.get(id);
-  const m = await get('media', id);
-  if (!m || !m.blob) return null;
-  const url = URL.createObjectURL(m.blob);
-  mediaUrlCache.set(id, url);
-  return url;
+  if(!id)return null;
+  if(mediaUrlCache.has(id))return mediaUrlCache.get(id);
+  const m=await get('media',id);
+  if(!m||!m.storagePath)return null;
+  const {data}=supabase.storage.from('areej-media').getPublicUrl(m.storagePath);
+  mediaUrlCache.set(id,data.publicUrl);return data.publicUrl;
 }
 function catName(cat, lang){
   if (!cat) return '';
@@ -1190,9 +1208,8 @@ async function handleImageUpload(file){
   if (!file) return null;
   if (!file.type.startsWith('image/')){ toast(t('media.max')); return null; }
   if (file.size > 4 * 1024 * 1024){ toast(t('media.max')); return null; }
-  const id = await put('media', {name: file.name, type: file.type, size: file.size, blob: file, createdAt: Date.now()});
-  mediaUrlCache.delete(id);
-  return id;
+  const id=await put('media',{name:file.name,type:file.type,size:file.size,blob:file,createdAt:Date.now()});
+  mediaUrlCache.delete(id);return id;
 }
 async function adminMedia(main){
   const items = (await all('media')).sort((a, b) => b.createdAt - a.createdAt);
