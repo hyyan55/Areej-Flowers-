@@ -598,8 +598,8 @@ function StatsTab({ t, token }: { t: Dict; token: string }) {
       </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {stats.map((s) => (
-          <div key={s.label} className="card p-4 text-center">
-            <p className="font-display text-3xl font-extrabold" style={{ color: "var(--accent)" }}>{s.value}</p>
+          <div key={s.label} className="card p-3 sm:p-4 text-center">
+            <p className="font-display text-2xl sm:text-3xl font-extrabold" style={{ color: "var(--accent)" }}>{s.value}</p>
             <p className="dim text-sm mt-1">{s.label}</p>
           </div>
         ))}
@@ -609,29 +609,31 @@ function StatsTab({ t, token }: { t: Dict; token: string }) {
         {!hasData ? (
           <p className="dim text-sm">{t.visitorsNoData}</p>
         ) : (
-          <div className="flex items-end gap-[3px] h-40" role="img" aria-label={t.visitorsDaily}>
-            {days.map((day) => (
-              <div
-                key={day.date}
-                className="flex-1 flex flex-col items-center justify-end h-full min-w-0"
-                title={`${day.date}: ${day.count}`}
-              >
-                <span className="text-[11px] leading-none font-bold mb-1" style={{ color: "var(--accent)" }}>
-                  {day.count > 0 ? day.count : ""}
-                </span>
+          <div className="overflow-x-auto">
+            <div className="flex items-end gap-1.5 h-40 min-w-[560px]" role="img" aria-label={t.visitorsDaily}>
+              {days.map((day) => (
                 <div
-                  className="w-full rounded-t"
-                  style={{
-                    height: `${day.count === 0 ? 1.5 : Math.max(5, (day.count / max) * 100)}%`,
-                    background: "var(--accent)",
-                    opacity: day.count === 0 ? 0.15 : 0.85,
-                  }}
-                />
-                <span className="dim text-[10px] leading-none mt-1">
-                  {new Date(`${day.date}T00:00:00Z`).getUTCDate()}
-                </span>
-              </div>
-            ))}
+                  key={day.date}
+                  className="flex-1 flex flex-col items-center justify-end h-full min-w-0"
+                  title={`${day.date}: ${day.count}`}
+                >
+                  <span className="text-[11px] leading-none font-bold mb-1" style={{ color: "var(--accent)" }}>
+                    {day.count > 0 ? day.count : ""}
+                  </span>
+                  <div
+                    className="w-full rounded-t"
+                    style={{
+                      height: `${day.count === 0 ? 1.5 : Math.max(5, (day.count / max) * 100)}%`,
+                      background: "var(--accent)",
+                      opacity: day.count === 0 ? 0.15 : 0.85,
+                    }}
+                  />
+                  <span className="dim text-[10px] leading-none mt-1">
+                    {new Date(`${day.date}T00:00:00Z`).getUTCDate()}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
         <p className="dim text-sm mt-4">{t.visitorsNote}</p>
