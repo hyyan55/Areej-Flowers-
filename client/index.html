@@ -2,6 +2,20 @@
 <html lang="ar" dir="rtl">
   <head>
     <meta charset="utf-8" />
+    <script>
+      // /contact has its own 9KB static page (contact.html) that opens at once
+      // on any connection. Redirect there immediately, BEFORE the 578KB app
+      // bundle even starts downloading — no Render setting needed for this.
+      // (The /contact -> /contact.html rewrite in Render does the same
+      // server-side when present; this makes it work even without that rule.)
+      // Only runs on a real page load; in-app navigation (pushState) is untouched.
+      (function () {
+        var p = window.location.pathname;
+        if (p === "/contact" || p === "/contact/") {
+          window.location.replace("/contact.html" + window.location.search + window.location.hash);
+        }
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
     <meta name="description" content="مساحة للكلمات، والمعرفة، والأثر الجميل. مدونة أريج خضر محمد النور — كاتبة وصانعة محتوى تعليمي وتثقيفي من كسلا، السودان." />
