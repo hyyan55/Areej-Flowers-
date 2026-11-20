@@ -435,7 +435,7 @@ function writeSiteCache(payload: SitePayload): void {
   }
 }
 
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+function withTimeout<T>(promise: PromiseLike<T>, ms: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<T>((_resolve, reject) => {
     timer = setTimeout(() => reject(new Error("timeout")), ms);
@@ -680,13 +680,23 @@ async function submitMessage(args: {
   }
   // Insert WITHOUT .select(): anonymous visitors cannot read messages back
   // (SELECT is admin-only), and asking for the row fails the whole request.
-  const { error } = await supabase.from("messages").insert({
-    name,
-    subject,
-    body,
-    is_read: false,
-    created_at: new Date(now).toISOString(),
-  });
+  // Capped at 12s: on a slow connection the button must show an error
+  // instead of spinning forever.
+  let error: unknown;
+  try {
+    ({ error } = await withTimeout(
+      supabase.from("messages").insert({
+        name,
+        subject,
+        body,
+        is_read: false,
+        created_at: new Date(now).toISOString(),
+      }),
+      12000,
+    ));
+  } catch {
+    throw new Error("تعذّر إرسال الرسالة — تحقق من الاتصال وحاول مجدداً.");
+  }
   if (error) throw error;
   return { ok: true };
 }

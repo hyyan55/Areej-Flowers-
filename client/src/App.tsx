@@ -5,7 +5,6 @@ import { FIELDS } from "./fields";
 import { STRINGS, type Lang } from "./i18n";
 import { getPreset, type PresetId } from "./presets";
 import { formatDate, PostCard, SocialLinks, type Post } from "./shared";
-import { aboutImg, heroImg } from "./assets/images";
 
 // The admin dashboard is a large chunk; load it only when #/admin opens so
 // the first paint stays light.
@@ -24,31 +23,30 @@ type Appearance = "light" | "dark";
 
 const PAGE_SIZE = 9;
 
-/* ---------------- Hash routing ----------------
-   The app used to navigate by internal state only, so a direct link such as
-   /contact always opened the homepage. These helpers keep the URL in sync
-   with the current view (hash form, e.g. #/contact) and read it back on
-   load, so direct links, refreshes, sharing and the back button all open
-   the right page. Plain paths (/contact) are accepted too and normalised
-   to the hash form on first load.
+/* ---------------- Clean-path routing ----------------
+   Pages live at real paths (/contact, /writings, /about, …) with no hash:
+   navigation writes the path with history.pushState, the back/forward
+   buttons and direct links read it back on load, and the server's SPA
+   rewrite (/* → /index.html) serves the app for every path. Old hash
+   links (#/contact) still work and are normalised to the clean path.
    A Supabase password-recovery fragment (#access_token=...&type=recovery)
    is never treated as a route: it opens the admin view so the reset form
    shows, and the URL is never rewritten while it is present. */
 
-function viewToHash(v: View): string {
+function viewToPath(v: View): string {
   switch (v.name) {
     case "home":
-      return "#/";
+      return "/";
     case "about":
-      return "#/about";
+      return "/about";
     case "archive":
-      return v.section === "education" ? "#/educational" : `#/${v.section}`;
+      return v.section === "education" ? "/educational" : `/${v.section}`;
     case "article":
-      return `#/article/${encodeURIComponent(v.slug)}`;
+      return `/article/${encodeURIComponent(v.slug)}`;
     case "contact":
-      return "#/contact";
+      return "/contact";
     case "admin":
-      return "#/admin";
+      return "/admin";
   }
 }
 
@@ -56,11 +54,7 @@ function isRecoveryHash(hash: string): boolean {
   return hash.includes("access_token=") || hash.includes("type=recovery");
 }
 
-function viewFromLocation(): View | null {
-  const hash = window.location.hash;
-  if (isRecoveryHash(hash)) return { name: "admin" };
-  const raw = hash.startsWith("#") ? hash.slice(1) : "";
-  const path = raw || window.location.pathname;
+function viewFromSegments(path: string): View | null {
   const parts = path
     .split("/")
     .filter(Boolean)
@@ -71,7 +65,7 @@ function viewFromLocation(): View | null {
         return p;
       }
     });
-  if (parts.length === 0) return { name: "home" };
+  if (parts.length === 0) return null;
   const [first, second] = parts;
   switch (first) {
     case "about":
@@ -94,8 +88,36 @@ function viewFromLocation(): View | null {
   }
 }
 
+function viewFromLocation(): View {
+  const hash = window.location.hash;
+  if (isRecoveryHash(hash)) return { name: "admin" };
+  return (
+    viewFromSegments(window.location.pathname) ??
+    (hash.startsWith("#") ? viewFromSegments(hash.slice(1)) : null) ?? { name: "home" }
+  );
+}
+
 function sameView(a: View, b: View): boolean {
-  return viewToHash(a) === viewToHash(b);
+  return viewToPath(a) === viewToPath(b);
+}
+
+/* ---------------- Lazy artwork ----------------
+   The two default images are ~1MB of base64 and used to ship inside the
+   main bundle, so every page — including Contact, which shows no images —
+   had to download them before it could open. They now load on demand, so
+   the first paint downloads only the code. */
+function useArtwork(): { heroImg: string; aboutImg: string } | null {
+  const [art, setArt] = useState<{ heroImg: string; aboutImg: string } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void import("./assets/images").then((m) => {
+      if (alive) setArt({ heroImg: m.heroImg, aboutImg: m.aboutImg });
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return art;
 }
 
 export function App() {
@@ -144,7 +166,7 @@ export function App() {
     }
   }, [settings, langInit]);
 
-  const [view, setView] = useState<View>(() => viewFromLocation() ?? { name: "home" });
+  const [view, setView] = useState<View>(() => viewFromLocation());
   const viewRef = useRef(view);
   const [menuOpen, setMenuOpen] = useState(false);
   // Design Studio live preview (not saved)
@@ -212,20 +234,21 @@ export function App() {
     if (sameView(v, viewRef.current)) return;
     viewRef.current = v;
     setView(v);
-    const h = viewToHash(v);
-    if (window.location.hash !== h) window.history.pushState(null, "", h);
+    const p = viewToPath(v);
+    if (window.location.pathname !== p || window.location.hash) {
+      window.history.pushState(null, "", p);
+    }
   };
   const nav = (v: View) => go(v);
   const openPost = (slug: string) => go({ name: "article", slug });
 
-  // First load: a plain path such as /contact is rewritten to its hash
-  // form (#/contact) so a refresh keeps the same page. Recovery fragments
-  // are never touched.
+  // First load: an old hash link (#/contact) is rewritten to its clean
+  // path (/contact). Recovery fragments are never touched.
   useEffect(() => {
     const hash = window.location.hash;
     if (isRecoveryHash(hash)) return;
-    if (!hash && window.location.pathname !== "/") {
-      window.history.replaceState(null, "", viewToHash(viewRef.current));
+    if (hash.startsWith("#/")) {
+      window.history.replaceState(null, "", viewToPath(viewRef.current));
     }
   }, []);
 
@@ -233,7 +256,7 @@ export function App() {
   useEffect(() => {
     const onRoute = () => {
       const v = viewFromLocation();
-      if (v && !sameView(v, viewRef.current)) {
+      if (!sameView(v, viewRef.current)) {
         viewRef.current = v;
         setView(v);
       }
@@ -488,6 +511,8 @@ function HomePage({
   });
   const featuredPost: Post | undefined = featured.data?.posts[0];
   const photoUrl = settings.photo_url;
+  const art = useArtwork();
+  const previewSrc = photoUrl ?? art?.aboutImg;
 
   return (
     <div>
@@ -515,8 +540,10 @@ function HomePage({
           <div className="fade-up fade-up-1">
             {photoUrl ? (
               <img src={photoUrl} alt={profile.full_name_ar} className="w-full max-h-[480px] object-cover" style={{ borderRadius: "var(--radius)", boxShadow: "var(--shadow)" }} />
+            ) : art ? (
+              <img src={art.heroImg} alt="" className="w-full max-h-[480px] object-cover" style={{ borderRadius: "var(--radius)", boxShadow: "var(--shadow)" }} />
             ) : (
-              <img src={heroImg} alt="" className="w-full max-h-[480px] object-cover" style={{ borderRadius: "var(--radius)", boxShadow: "var(--shadow)" }} />
+              <div aria-hidden="true" className="w-full" style={{ minHeight: 240, background: "var(--surface2)", borderRadius: "var(--radius)" }} />
             )}
           </div>
         </div>
@@ -529,8 +556,10 @@ function HomePage({
           <article className="card overflow-hidden md:grid md:grid-cols-2 fade-up">
             {featuredPost.cover_url ? (
               <img src={featuredPost.cover_url} alt={featuredPost.title} className="w-full h-64 md:h-full object-cover" />
+            ) : art ? (
+              <img src={art.aboutImg} alt="" className="w-full h-64 md:h-full object-cover" />
             ) : (
-              <img src={aboutImg} alt="" className="w-full h-64 md:h-full object-cover" />
+              <div aria-hidden="true" className="w-full h-64 md:h-full" style={{ background: "var(--surface2)" }} />
             )}
             <div className="p-6 md:p-8 flex flex-col gap-3">
               <div className="flex flex-wrap gap-2 text-xs dim">
@@ -624,7 +653,11 @@ function HomePage({
       {/* About preview */}
       <section style={{ background: "var(--surface2)" }}>
         <div className="max-w-6xl mx-auto px-4 grid md:grid-cols-2 gap-8 items-center" style={{ paddingTop: "var(--space-section)", paddingBottom: "var(--space-section)" }}>
-          <img src={photoUrl ?? aboutImg} alt={profile.full_name_ar} className="w-full max-h-96 object-cover" style={{ borderRadius: "var(--radius)", boxShadow: "var(--shadow)" }} loading="lazy" />
+          {previewSrc ? (
+            <img src={previewSrc} alt={profile.full_name_ar} className="w-full max-h-96 object-cover" style={{ borderRadius: "var(--radius)", boxShadow: "var(--shadow)" }} loading="lazy" />
+          ) : (
+            <div aria-hidden="true" className="w-full" style={{ minHeight: 240, background: "var(--surface2)", borderRadius: "var(--radius)" }} />
+          )}
           <div>
             <h2 className="font-display text-2xl font-extrabold" style={{ color: "var(--accent)" }}>{t.aboutPreview}</h2>
             <p className="font-display text-xl font-bold mt-3">{lang === "en" && profile.full_name_en ? profile.full_name_en : profile.full_name_ar}</p>
@@ -648,6 +681,8 @@ type ApiCategory = import("./shared").Category;
 
 function AboutPage({ t, lang, settings, profile }: { t: (typeof STRINGS)["ar"]; lang: Lang; settings: ApiSettings; profile: ApiProfile }) {
   const name = lang === "en" && profile.full_name_en ? profile.full_name_en : profile.full_name_ar;
+  const art = useArtwork();
+  const photoSrc = settings.photo_url ?? art?.aboutImg;
   const facts: { label: string; value: string }[] = [
     { label: t.university, value: profile.university },
     { label: t.academicLevel, value: profile.academic_level },
@@ -658,12 +693,16 @@ function AboutPage({ t, lang, settings, profile }: { t: (typeof STRINGS)["ar"]; 
     <div className="max-w-4xl mx-auto px-4" style={{ paddingTop: "var(--space-section)", paddingBottom: "var(--space-section)" }}>
       <h1 className="font-display text-4xl font-extrabold fade-up" style={{ color: "var(--accent)" }}>{t.aboutTitle}</h1>
       <div className="grid md:grid-cols-[280px_1fr] gap-8 mt-8 items-start">
-        <img
-          src={settings.photo_url ?? aboutImg}
-          alt={name}
-          className="w-full max-h-[420px] object-cover fade-up"
-          style={{ borderRadius: "var(--radius)", boxShadow: "var(--shadow)" }}
-        />
+        {photoSrc ? (
+          <img
+            src={photoSrc}
+            alt={name}
+            className="w-full max-h-[420px] object-cover fade-up"
+            style={{ borderRadius: "var(--radius)", boxShadow: "var(--shadow)" }}
+          />
+        ) : (
+          <div aria-hidden="true" className="w-full fade-up" style={{ minHeight: 280, background: "var(--surface2)", borderRadius: "var(--radius)" }} />
+        )}
         <div className="fade-up fade-up-1">
           <h2 className="font-display text-3xl font-extrabold">{name}</h2>
           {profile.bio ? <p className="mt-4 leading-loose text-lg">{profile.bio}</p> : null}
