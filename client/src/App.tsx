@@ -21,6 +21,80 @@ type Appearance = "light" | "dark";
 
 const PAGE_SIZE = 9;
 
+/* ---------------- Hash routing ----------------
+   The app used to navigate by internal state only, so a direct link such as
+   /contact always opened the homepage. These helpers keep the URL in sync
+   with the current view (hash form, e.g. #/contact) and read it back on
+   load, so direct links, refreshes, sharing and the back button all open
+   the right page. Plain paths (/contact) are accepted too and normalised
+   to the hash form on first load.
+   A Supabase password-recovery fragment (#access_token=...&type=recovery)
+   is never treated as a route: it opens the admin view so the reset form
+   shows, and the URL is never rewritten while it is present. */
+
+function viewToHash(v: View): string {
+  switch (v.name) {
+    case "home":
+      return "#/";
+    case "about":
+      return "#/about";
+    case "archive":
+      return v.section === "education" ? "#/educational" : `#/${v.section}`;
+    case "article":
+      return `#/article/${encodeURIComponent(v.slug)}`;
+    case "contact":
+      return "#/contact";
+    case "admin":
+      return "#/admin";
+  }
+}
+
+function isRecoveryHash(hash: string): boolean {
+  return hash.includes("access_token=") || hash.includes("type=recovery");
+}
+
+function viewFromLocation(): View | null {
+  const hash = window.location.hash;
+  if (isRecoveryHash(hash)) return { name: "admin" };
+  const raw = hash.startsWith("#") ? hash.slice(1) : "";
+  const path = raw || window.location.pathname;
+  const parts = path
+    .split("/")
+    .filter(Boolean)
+    .map((p) => {
+      try {
+        return decodeURIComponent(p);
+      } catch {
+        return p;
+      }
+    });
+  if (parts.length === 0) return { name: "home" };
+  const [first, second] = parts;
+  switch (first) {
+    case "about":
+      return { name: "about" };
+    case "writings":
+      return { name: "archive", section: "writings" };
+    case "education":
+    case "educational":
+      return { name: "archive", section: "education" };
+    case "journal":
+      return { name: "archive", section: "journal" };
+    case "article":
+      return second ? { name: "article", slug: second } : null;
+    case "contact":
+      return { name: "contact" };
+    case "admin":
+      return { name: "admin" };
+    default:
+      return null;
+  }
+}
+
+function sameView(a: View, b: View): boolean {
+  return viewToHash(a) === viewToHash(b);
+}
+
 export function App() {
   const site = useQuery({ queryKey: ["site"], queryFn: () => api.getSite({}) });
   const bootRef = useRef(false);
@@ -51,7 +125,8 @@ export function App() {
     }
   }, [settings, langInit]);
 
-  const [view, setView] = useState<View>({ name: "home" });
+  const [view, setView] = useState<View>(() => viewFromLocation() ?? { name: "home" });
+  const viewRef = useRef(view);
   const [menuOpen, setMenuOpen] = useState(false);
   // Design Studio live preview (not saved)
   const [preview, setPreview] = useState<{
@@ -112,8 +187,45 @@ export function App() {
     }
   }, [settings?.favicon_url]);
 
-  const nav = (v: View) => setView(v);
-  const openPost = (slug: string) => setView({ name: "article", slug });
+  // Every view change goes through `go`, which also writes the URL so the
+  // page is shareable, refreshable and reachable by direct link.
+  const go = (v: View) => {
+    if (sameView(v, viewRef.current)) return;
+    viewRef.current = v;
+    setView(v);
+    const h = viewToHash(v);
+    if (window.location.hash !== h) window.history.pushState(null, "", h);
+  };
+  const nav = (v: View) => go(v);
+  const openPost = (slug: string) => go({ name: "article", slug });
+
+  // First load: a plain path such as /contact is rewritten to its hash
+  // form (#/contact) so a refresh keeps the same page. Recovery fragments
+  // are never touched.
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (isRecoveryHash(hash)) return;
+    if (!hash && window.location.pathname !== "/") {
+      window.history.replaceState(null, "", viewToHash(viewRef.current));
+    }
+  }, []);
+
+  // Back/forward buttons and manual URL edits.
+  useEffect(() => {
+    const onRoute = () => {
+      const v = viewFromLocation();
+      if (v && !sameView(v, viewRef.current)) {
+        viewRef.current = v;
+        setView(v);
+      }
+    };
+    window.addEventListener("hashchange", onRoute);
+    window.addEventListener("popstate", onRoute);
+    return () => {
+      window.removeEventListener("hashchange", onRoute);
+      window.removeEventListener("popstate", onRoute);
+    };
+  }, []);
 
   const headerIdentity = settings?.header_identity ?? "text";
   const headerImg =
