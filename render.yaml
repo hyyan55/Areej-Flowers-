@@ -1,0 +1,15 @@
+# Render static site for Areej Flowers
+# Deploy from GitHub: Render -> New -> Static Site -> pick the repo.
+# No environment variables are needed: the Supabase publishable key is
+# embedded in client/src/api.ts (it is public by design).
+
+services:
+  - type: web
+    name: areej-flowers
+    env: static
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

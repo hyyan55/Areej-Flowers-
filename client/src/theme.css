@@ -1,0 +1,175 @@
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&family=Playfair+Display:ital,wght@0,500;0,700;0,800;1,500&family=Inter:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+@import "tailwindcss-safe-area";
+
+@theme {
+  --text-xs: 12px;
+  --text-xs--line-height: 16px;
+  --text-sm: 14px;
+  --text-sm--line-height: 21px;
+  --text-base: 16px;
+  --text-base--line-height: 26px;
+  --text-lg: 18px;
+  --text-lg--line-height: 30px;
+  --text-xl: 20px;
+  --text-xl--line-height: 32px;
+  --text-2xl: 24px;
+  --text-2xl--line-height: 36px;
+  --text-3xl: 30px;
+  --text-3xl--line-height: 42px;
+  --text-4xl: 36px;
+  --text-4xl--line-height: 48px;
+  --text-5xl: 48px;
+  --text-5xl--line-height: 58px;
+}
+
+:root {
+  color-scheme: light;
+  --bg: #f8f3fa;
+  --surface: #ffffff;
+  --surface2: #f3eaf7;
+  --text: #2c2137;
+  --dim: #6f5b82;
+  --border: #e3d3ee;
+  --accent: #79509b;
+  --accent2: #e7a8cb;
+  --accent3: #668fc2;
+  --accent3-soft: #e7eff8;
+  --neutral: #85858f;
+  --neutral-soft: #f0f0f3;
+  --neutral-ink: #34343d;
+  --accent-ink: #ffffff;
+  --header-bg: #ffffff;
+  --footer-bg: #49305f;
+  --footer-text: #f3eaf7;
+  --radius: 14px;
+  --shadow: 0 10px 30px rgba(73, 48, 95, 0.10);
+  --font-body: "Cairo", "Inter", system-ui, sans-serif;
+  --font-display: "Cairo", "Playfair Display", serif;
+  --space-section: 4.5rem;
+  --space-surface: var(--surface);
+  --space-surface-alt: var(--surface2);
+  --space-muted: var(--dim);
+  --space-border: var(--border);
+  --space-accent: var(--accent);
+}
+
+@layer base {
+  button, [role="button"], select, summary, a, input:not([type="checkbox"], [type="radio"]), textarea {
+    min-height: 2.25rem;
+  }
+  html { scroll-behavior: smooth; }
+  body { font-family: var(--font-body); }
+}
+
+.app-root {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  transition: background-color 0.35s ease, color 0.35s ease;
+  min-height: 100vh;
+}
+.font-display { font-family: var(--font-display); }
+
+.surface { background: var(--surface); }
+.surface2 { background: var(--surface2); }
+.dim { color: var(--dim); }
+.bordered { border-color: var(--border); }
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.btn-primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-radius: calc(var(--radius) * 0.75);
+  font-weight: 700;
+  transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.2s ease;
+}
+.btn-primary:hover { opacity: 0.92; }
+.btn-primary:active { transform: scale(0.98); }
+.btn-ghost {
+  border: 1px solid var(--border);
+  color: var(--text);
+  background: var(--surface);
+  border-radius: calc(var(--radius) * 0.75);
+  font-weight: 600;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+.btn-ghost:hover { border-color: var(--accent); }
+.chip {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--dim);
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+.chip-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+.input {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) * 0.7);
+  padding: 0.55rem 0.8rem;
+  color: var(--text);
+  font-family: var(--font-body);
+}
+.input:focus { outline: 2px solid var(--accent2); outline-offset: 1px; border-color: var(--accent); }
+.label { display: block; font-size: 0.85rem; font-weight: 700; margin-bottom: 0.35rem; color: var(--text); }
+
+.nav-link { position: relative; font-weight: 600; color: var(--dim); padding: 0.4rem 0.15rem; }
+.nav-link:hover { color: var(--accent); }
+.nav-link-active { color: var(--accent); }
+.nav-link-active::after {
+  content: ""; position: absolute; bottom: -2px; inset-inline-start: 0; inset-inline-end: 0;
+  height: 2px; background: var(--accent2); border-radius: 2px;
+}
+
+/* Article body typography */
+.prose-areej { line-height: 2; font-size: 1.06rem; }
+.prose-areej p { margin: 0 0 1.1em; }
+.prose-areej h2 { font-family: var(--font-display); font-size: 1.55rem; font-weight: 800; margin: 1.4em 0 0.6em; color: var(--text); }
+.prose-areej h3 { font-size: 1.25rem; font-weight: 800; margin: 1.2em 0 0.5em; }
+.prose-areej ul, .prose-areej ol { margin: 0 0 1.1em; padding-inline-start: 1.4em; }
+.prose-areej ul { list-style: disc; }
+.prose-areej ol { list-style: decimal; }
+.prose-areej blockquote {
+  border-inline-start: 3px solid var(--accent2);
+  padding: 0.4em 1em; margin: 0 0 1.1em; color: var(--dim); font-style: italic;
+  background: var(--surface2); border-radius: 0 var(--radius) var(--radius) 0;
+}
+[dir="ltr"] .prose-areej blockquote { border-radius: var(--radius) 0 0 var(--radius); }
+.prose-areej a { color: var(--accent); text-decoration: underline; }
+.prose-areej img { max-width: 100%; border-radius: var(--radius); margin: 0.5em 0; }
+
+/* Preset-specific structure */
+.app-root[data-preset="royal"] .site-header { background: var(--header-bg); color: #fdf7ff; }
+.app-root[data-preset="royal"] .site-header .nav-link { color: #d9c6ee; }
+.app-root[data-preset="royal"] .site-header .nav-link-active, .app-root[data-preset="royal"] .site-header .nav-link:hover { color: #ffffff; }
+.app-root[data-preset="editorial"] .site-header { border-bottom: 3px double var(--text); }
+.app-root[data-preset="editorial"] .card { box-shadow: none; border-width: 1.5px; }
+.app-root[data-preset="editorial"] .hero-rule { border-top: 3px solid var(--text); border-bottom: 1px solid var(--text); }
+.app-root[data-preset="blossom"] .card { border-color: transparent; }
+.app-root[data-preset="midnight"] .site-footer { border-top: 1px solid var(--accent2); }
+
+@keyframes fadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+.fade-up { animation: fadeUp 0.55s ease both; }
+.fade-up-1 { animation-delay: 0.08s; }
+.fade-up-2 { animation-delay: 0.16s; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.fade-in { animation: fadeIn 0.3s ease both; }
+@keyframes slideDown { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+.slide-down { animation: slideDown 0.25s ease both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .fade-up, .fade-in, .slide-down { animation: none; }
+  html { scroll-behavior: auto; }
+  .app-root { transition: none; }
+}
