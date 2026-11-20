@@ -329,8 +329,18 @@ html[data-mode="dark"] .edu-callout{background:#26324A}
 </footer>
 <div class="toast-wrap" id="toastWrap"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 'use strict';
+/* ================= Supabase ================= */
+const SUPABASE_URL='https://brpfiahribknkoqxzcch.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY='sb_publishable_lAAaaAB7EqYn5UaKBpVeJA_-3Ww2KCH';
+const ADMIN_LOGIN_EMAIL='hyyanmohamed55@gmail.com';
+const supabase=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);
+let recoveryMode=false;
+supabase.auth.onAuthStateChange(event=>{
+  if(event==='PASSWORD_RECOVERY'){recoveryMode=true;setTimeout(()=>renderAdminPasswordRecovery(),0);}
+});
 /* ================= Utilities ================= */
 const $ = (s, el) => (el || document).querySelector(s);
 const $$ = (s, el) => Array.from((el || document).querySelectorAll(s));
@@ -892,18 +902,21 @@ const ADMIN_MENU = [
   ['design', 'admin.design'], ['settings', 'admin.settings'], ['messages', 'admin.messages'],
   ['seo', 'admin.seo'], ['account', 'admin.account']
 ];
-function isAdmin(){ try { return sessionStorage.getItem('af_admin') === '1'; } catch(e){ return false; } }
 async function adminAuthed(){
-  const rec = await get('auth', 1);
-  return !!rec;
+  const {data:{session}}=await supabase.auth.getSession();
+  if(!session)return false;
+  const {data,error}=await supabase.rpc('is_admin');
+  if(error)throw error;
+  return data===true;
 }
 async function renderAdmin(sub){
   const app = $('#app');
   const settings = window.__settings || {};
   setMeta(t('admin.title') + ' | ' + (settings.siteName || 'Areej Flowers'), t('admin.title'));
-  const hasAuth = await adminAuthed();
-  if (!hasAuth){ renderAdminSetup(); return; }
-  if (!isAdmin()){ renderAdminLogin(); return; }
+  let hasAdmin=false;
+  try{hasAdmin=await adminAuthed();}
+  catch(err){app.innerHTML='<div class="empty-state"><p>تعذر التحقق من صلاحيات المدير. حدّث الصفحة وحاول مجدداً.</p></div>';return;}
+  if(!hasAdmin){renderAdminLogin();return;}
   const section = sub[0] || '';
   const msgs = await all('messages');
   const unread = msgs.filter(m => !m.read).length;
@@ -917,7 +930,7 @@ async function renderAdmin(sub){
     }).join('') +
     '<a href="#" id="adminLogout">↩ ' + esc(t('admin.logout')) + '</a></aside>' +
     '<div class="admin-main" id="adminMain"></div></div>';
-  $('#adminLogout').addEventListener('click', e => { e.preventDefault(); try { sessionStorage.removeItem('af_admin'); } catch(err){} location.hash = '#/'; render(); });
+  $('#adminLogout').addEventListener('click',async e=>{e.preventDefault();await supabase.auth.signOut();location.hash='#/';render();});
   const main = $('#adminMain');
   if (section === '') await adminOverview(main);
   else if (section === 'posts') await adminPosts(main, sub[1], sub[2]);
@@ -932,40 +945,40 @@ async function renderAdmin(sub){
   else if (section === 'account') await adminAccount(main);
   else await adminOverview(main);
 }
-function renderAdminSetup(){
-  const app = $('#app');
-  app.innerHTML = '<div class="login-card"><div class="form-card"><h2>' + esc(t('admin.setup')) + '</h2><p style="color:var(--muted)">' + esc(t('admin.setupSub')) + '</p><div id="aAlert"></div>' +
-    '<form id="setupForm"><div class="field"><label>' + esc(t('admin.pin')) + '</label><input type="password" id="pin1" minlength="6" required autocomplete="new-password"></div>' +
-    '<div class="field"><label>' + esc(t('admin.pinConfirm')) + '</label><input type="password" id="pin2" minlength="6" required autocomplete="new-password"></div>' +
-    '<button class="btn btn-primary" type="submit" style="width:100%">' + esc(t('admin.createPin')) + '</button></form></div></div>';
-  $('#setupForm').addEventListener('submit', async e => {
-    e.preventDefault();
-    const p1 = $('#pin1').value, p2 = $('#pin2').value;
-    const box = $('#aAlert');
-    if (p1.length < 6) return box.innerHTML = '<div class="alert alert-error">' + esc(t('admin.pinMin')) + '</div>';
-    if (p1 !== p2) return box.innerHTML = '<div class="alert alert-error">' + esc(t('admin.pinMismatch')) + '</div>';
-    const salt = uid();
-    const hash = await sha256(salt + ':' + p1);
-    await put('auth', {id: 1, salt, hash, createdAt: Date.now()});
-    try { sessionStorage.setItem('af_admin', '1'); } catch(err){}
-    location.hash = '#/admin'; render();
+function renderAdminLogin(){
+  const app=$('#app');
+  app.innerHTML='<div class="login-card"><div class="form-card"><h2>'+esc(t('admin.title'))+'</h2><div id="lAlert"></div>'+
+    '<form id="loginForm"><div class="field"><label>اسم المستخدم</label><input id="adminUser" value="admin" autocomplete="username" required></div>'+
+    '<div class="field"><label>كلمة المرور</label><input type="password" id="adminPassword" required autocomplete="current-password"></div>'+
+    '<button class="btn btn-primary" type="submit" style="width:100%">'+esc(t('admin.login'))+'</button></form>'+
+    '<button class="btn btn-ghost" id="forgotPassword" type="button" style="width:100%;margin-top:10px">نسيت كلمة المرور؟ إرسال رابط الاستعادة</button></div></div>';
+  $('#loginForm').addEventListener('submit',async e=>{
+    e.preventDefault();const box=$('#lAlert'),username=$('#adminUser').value.trim(),password=$('#adminPassword').value;
+    if(username!=='admin'){box.innerHTML='<div class="alert alert-error">اسم المستخدم غير صحيح.</div>';return;}
+    const {error}=await supabase.auth.signInWithPassword({email:ADMIN_LOGIN_EMAIL,password});
+    if(error){box.innerHTML='<div class="alert alert-error">تعذر تسجيل الدخول. تحقق من كلمة المرور.</div>';return;}
+    location.hash='#/admin';render();
+  });
+  $('#forgotPassword').addEventListener('click',async()=>{
+    const {error}=await supabase.auth.resetPasswordForEmail(ADMIN_LOGIN_EMAIL,{redirectTo:location.href.split('#')[0]+'#/admin'});
+    $('#lAlert').innerHTML=error?'<div class="alert alert-error">تعذر إرسال رابط الاستعادة. حاول لاحقاً.</div>':'<div class="alert alert-success">إذا كان البريد مؤكداً فسيصلك رابط الاستعادة.</div>';
   });
 }
-function renderAdminLogin(){
-  const app = $('#app');
-  app.innerHTML = '<div class="login-card"><div class="form-card"><h2>' + esc(t('admin.title')) + '</h2><div id="lAlert"></div>' +
-    '<form id="loginForm"><div class="field"><label>' + esc(t('admin.pin')) + '</label><input type="password" id="pin" required autocomplete="current-password"></div>' +
-    '<button class="btn btn-primary" type="submit" style="width:100%">' + esc(t('admin.login')) + '</button></form></div></div>';
-  $('#loginForm').addEventListener('submit', async e => {
-    e.preventDefault();
-    const rec = await get('auth', 1);
-    const hash = await sha256(rec.salt + ':' + $('#pin').value);
-    if (hash === rec.hash){
-      try { sessionStorage.setItem('af_admin', '1'); } catch(err){}
-      location.hash = '#/admin'; render();
-    } else {
-      $('#lAlert').innerHTML = '<div class="alert alert-error">' + esc(t('admin.wrongPin')) + '</div>';
-    }
+function renderAdminPasswordRecovery(){
+  const app=$('#app');
+  app.innerHTML='<div class="login-card"><div class="form-card"><h2>تعيين كلمة مرور جديدة</h2><div id="rAlert"></div><form id="recoveryForm">'+
+    '<div class="field"><label>كلمة المرور الجديدة</label><input id="recoveryPassword" type="password" minlength="8" required autocomplete="new-password"></div>'+
+    '<div class="field"><label>تأكيد كلمة المرور</label><input id="recoveryConfirm" type="password" minlength="8" required autocomplete="new-password"></div>'+
+    '<button class="btn btn-primary" type="submit" style="width:100%">حفظ كلمة المرور</button></form></div></div>';
+  $('#recoveryForm').addEventListener('submit',async e=>{
+    e.preventDefault();const p=$('#recoveryPassword').value,c=$('#recoveryConfirm').value,box=$('#rAlert');
+    if(p.length<8){box.innerHTML='<div class="alert alert-error">كلمة المرور يجب أن تكون 8 أحرف على الأقل.</div>';return;}
+    if(p!==c){box.innerHTML='<div class="alert alert-error">كلمتا المرور غير متطابقتين.</div>';return;}
+    const {error}=await supabase.auth.updateUser({password:p});
+    if(error){box.innerHTML='<div class="alert alert-error">تعذر تحديث كلمة المرور. أعد طلب رابط الاستعادة.</div>';return;}
+    recoveryMode=false;await supabase.auth.signOut();
+    box.innerHTML='<div class="alert alert-success">تم تحديث كلمة المرور. يمكنك تسجيل الدخول الآن.</div>';
+    setTimeout(()=>{location.hash='#/admin';render();},900);
   });
 }
 async function adminOverview(main){
@@ -1416,38 +1429,22 @@ async function adminSeo(main){
   });
 }
 async function adminAccount(main){
-  main.innerHTML = '<div class="panel"><h3>' + esc(t('acc.changePin')) + '</h3><div id="accAlert"></div>' +
-    '<form id="pinForm"><div class="field"><label>' + esc(t('admin.pinOld')) + '</label><input type="password" id="oldPin" required autocomplete="current-password"></div>' +
-    '<div class="field"><label>' + esc(t('admin.pinNew')) + '</label><input type="password" id="newPin" required minlength="6" autocomplete="new-password"></div>' +
-    '<div class="field"><label>' + esc(t('admin.pinConfirm')) + '</label><input type="password" id="newPin2" required minlength="6" autocomplete="new-password"></div>' +
-    '<button class="btn btn-primary" type="submit">' + esc(t('admin.save')) + '</button></form></div>' +
-    '<div class="panel"><h3>' + esc(t('acc.deleteSamples')) + '</h3><p style="color:var(--muted)">' + esc(t('sample.note')) + '</p>' +
-    '<button class="btn btn-ghost" id="delSamples" type="button">' + esc(t('acc.deleteSamples')) + '</button></div>' +
-    '<div class="panel"><h3>' + esc(t('acc.export')) + '</h3><button class="btn btn-ghost" id="expData" type="button">' + esc(t('acc.export')) + '</button></div>';
-  $('#pinForm').addEventListener('submit', async e => {
-    e.preventDefault();
-    const rec = await get('auth', 1);
-    const oldHash = await sha256(rec.salt + ':' + $('#oldPin').value);
-    const box = $('#accAlert');
-    if (oldHash !== rec.hash) return box.innerHTML = '<div class="alert alert-error">' + esc(t('admin.wrongPin')) + '</div>';
-    if ($('#newPin').value.length < 6) return box.innerHTML = '<div class="alert alert-error">' + esc(t('admin.pinMin')) + '</div>';
-    if ($('#newPin').value !== $('#newPin2').value) return box.innerHTML = '<div class="alert alert-error">' + esc(t('admin.pinMismatch')) + '</div>';
-    const salt = uid();
-    await put('auth', {id: 1, salt, hash: await sha256(salt + ':' + $('#newPin').value), createdAt: Date.now()});
-    box.innerHTML = '<div class="alert alert-success">' + esc(t('admin.saved')) + '</div>';
+  main.innerHTML='<div class="panel"><h3>تغيير كلمة المرور</h3><div id="accAlert"></div><form id="passwordForm">'+
+    '<div class="field"><label>كلمة المرور الجديدة</label><input type="password" id="newPassword" required minlength="8" autocomplete="new-password"></div>'+
+    '<div class="field"><label>تأكيد كلمة المرور الجديدة</label><input type="password" id="newPassword2" required minlength="8" autocomplete="new-password"></div>'+
+    '<button class="btn btn-primary" type="submit">'+esc(t('admin.save'))+'</button></form></div>'+
+    '<div class="panel"><h3>'+esc(t('acc.deleteSamples'))+'</h3><p style="color:var(--muted)">'+esc(t('sample.note'))+'</p><button class="btn btn-ghost" id="delSamples" type="button">'+esc(t('acc.deleteSamples'))+'</button></div>'+
+    '<div class="panel"><h3>'+esc(t('acc.export'))+'</h3><button class="btn btn-ghost" id="expData" type="button">'+esc(t('acc.export'))+'</button></div>';
+  $('#passwordForm').addEventListener('submit',async e=>{
+    e.preventDefault();const p=$('#newPassword').value,p2=$('#newPassword2').value,box=$('#accAlert');
+    if(p.length<8){box.innerHTML='<div class="alert alert-error">كلمة المرور يجب أن تكون 8 أحرف على الأقل.</div>';return;}
+    if(p!==p2){box.innerHTML='<div class="alert alert-error">كلمتا المرور غير متطابقتين.</div>';return;}
+    const {error}=await supabase.auth.updateUser({password:p});
+    box.innerHTML=error?'<div class="alert alert-error">تعذر تحديث كلمة المرور.</div>':'<div class="alert alert-success">تم تحديث كلمة المرور بنجاح.</div>';
+    e.target.reset();
   });
-  $('#delSamples').addEventListener('click', async () => {
-    if (!confirm(t('admin.confirmDelete'))) return;
-    const posts = await all('posts');
-    for (const p of posts.filter(x => x.isSample)) await del('posts', p.id);
-    toast(t('acc.samplesDeleted')); render();
-  });
-  $('#expData').addEventListener('click', async () => {
-    const data = {};
-    for (const s of STORES){ data[s] = await all(s); }
-    data.media = data.media.map(m => ({id: m.id, name: m.name, type: m.type, size: m.size, createdAt: m.createdAt}));
-    downloadFile('areej-flowers-backup.json', JSON.stringify(data, null, 2), 'application/json');
-  });
+  $('#delSamples').addEventListener('click',async()=>{if(!confirm(t('admin.confirmDelete')))return;const posts=await all('posts');for(const p of posts.filter(x=>x.isSample))await del('posts',p.id);toast(t('acc.samplesDeleted'));render();});
+  $('#expData').addEventListener('click',async()=>{const data={};for(const st of STORES)data[st]=await all(st);data.media=data.media.map(m=>({id:m.id,name:m.name,type:m.type,size:m.size,createdAt:m.createdAt}));downloadFile('areej-flowers-backup.json',JSON.stringify(data,null,2),'application/json');});
 }
 
 /* ================= Init ================= */
@@ -1460,6 +1457,8 @@ $('#menuBtn').addEventListener('click', () => {
 $('#mobileNav').addEventListener('click', e => { if (e.target.tagName === 'A') $('#mobileNav').style.display = 'none'; });
 window.addEventListener('hashchange', render);
 (async function init(){
+  const {data:{session}}=await supabase.auth.getSession();
+  if(session&&recoveryMode){renderAdminPasswordRecovery();return;}
   await seedIfNeeded();
   window.__settings = await getSettings();
   window.__profile = await getProfile();
